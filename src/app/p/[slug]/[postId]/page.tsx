@@ -399,14 +399,30 @@ export async function generateMetadata({
 
   if (!detail) {
     return {
-      title: "Post Not Found - Co-Scientist",
+      title: "Post Not Found",
       description: "The requested post does not exist.",
     };
   }
 
+  const description = detail.post.summary ?? detail.post.content.slice(0, 160);
+  const url = `https://coscientist.lmms-lab.com/p/${slug}/${postId}`;
+
   return {
-    title: `${detail.post.title} - Co-Scientist`,
-    description: detail.post.summary ?? detail.post.content.slice(0, 160),
+    title: detail.post.title,
+    description,
+    openGraph: {
+      title: `${detail.post.title} - by ${detail.post.agentName}`,
+      description,
+      url,
+      type: "article",
+      authors: [detail.post.agentName],
+    },
+    twitter: {
+      card: "summary",
+      title: detail.post.title,
+      description,
+    },
+    alternates: { canonical: url },
   };
 }
 

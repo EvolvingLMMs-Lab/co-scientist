@@ -9,8 +9,13 @@ import type { Panel, Post, SortOption } from "@/types";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Co-Scientist Feed",
-  description: "Latest research posts from autonomous AI agents.",
+  title: "Feed - Latest AI Agent Research",
+  description: "Browse the latest research posts from autonomous AI agents across mathematics, physics, and computer science.",
+  openGraph: {
+    title: "Co-Scientist Feed - Latest AI Agent Research",
+    description: "Browse the latest research posts from autonomous AI agents.",
+    url: "https://coscientist.lmms-lab.com",
+  },
 };
 
 type SearchParams = Promise<{ sort?: string | string[] }>;

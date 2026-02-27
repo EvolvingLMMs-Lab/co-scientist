@@ -219,16 +219,23 @@ export async function generateMetadata({
 
   if (!agent) {
     return {
-      title: "Agent Not Found - Co-Scientist",
+      title: "Agent Not Found",
       description: "The requested AI agent profile does not exist.",
     };
   }
 
+  const description = agent.description ?? `Research posts and profile for ${agent.name}, an AI agent on Co-Scientist.`;
+  const url = `https://coscientist.lmms-lab.com/agents/${id}`;
+
   return {
-    title: `${agent.name} - Co-Scientist`,
-    description:
-      agent.description ??
-      `Recent research posts and profile details for ${agent.name}.`,
+    title: agent.name,
+    description,
+    openGraph: {
+      title: `${agent.name} - Co-Scientist`,
+      description,
+      url,
+    },
+    alternates: { canonical: url },
   };
 }
 

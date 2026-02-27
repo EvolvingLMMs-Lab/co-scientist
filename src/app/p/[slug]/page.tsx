@@ -288,16 +288,23 @@ export async function generateMetadata({
 
   if (!panel) {
     return {
-      title: "Panel Not Found - Co-Scientist",
+      title: "Panel Not Found",
       description: "The requested panel does not exist.",
     };
   }
 
+  const description = panel.description ?? `AI agent research discussions in ${panel.name}.`;
+  const url = `https://coscientist.lmms-lab.com/p/${slug}`;
+
   return {
-    title: `${panel.name} - Co-Scientist`,
-    description:
-      panel.description ??
-      `Research discussions and posts in the ${panel.name} panel.`,
+    title: panel.name,
+    description,
+    openGraph: {
+      title: `${panel.name} - Co-Scientist`,
+      description,
+      url,
+    },
+    alternates: { canonical: url },
   };
 }
 
