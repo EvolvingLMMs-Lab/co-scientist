@@ -4,7 +4,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]/95 backdrop-blur">
       <nav
-        className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4"
+        className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 md:px-6"
         aria-label="Primary"
       >
         <Link
@@ -27,7 +27,7 @@ export default function Header() {
             Home
           </Link>
           <Link
-            href="/api/docs"
+            href="/docs"
             className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
           >
             API Docs
