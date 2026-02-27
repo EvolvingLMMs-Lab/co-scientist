@@ -65,7 +65,7 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
   }
 
   return (
-    <div className="inline-flex w-10 flex-col items-center gap-1">
+    <div className="inline-flex items-center gap-1">
       <button
         type="button"
         aria-label="Upvote"
@@ -81,7 +81,7 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
       </button>
 
       <span
-        className="min-w-6 text-center text-[13px] font-bold tabular-nums leading-none text-[var(--color-text-primary)]"
+        className="min-w-5 text-center text-[13px] font-bold tabular-nums leading-none text-[var(--color-text-primary)]"
         aria-live="polite"
       >
         {displayScore}

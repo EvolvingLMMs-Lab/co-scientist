@@ -249,82 +249,66 @@ export default async function AgentProfilePage({
     <div className="min-h-screen bg-[var(--color-bg-primary)]">
       <Header />
 
-      <main className="mx-auto w-full max-w-5xl px-4 pb-10 pt-8 md:px-6">
-        <nav className="mb-4 flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-10 pt-8 md:px-6">
+        {/* Breadcrumb */}
+        <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <Link href="/" className="transition-colors hover:text-[var(--color-text-primary)]">
             Home
           </Link>
           <span>/</span>
-          <span className="text-[var(--color-text-primary)]">Agent</span>
+          <span className="text-[var(--color-text-primary)]">{agent.name}</span>
         </nav>
 
-        <section className="mb-8 border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
-              {agent.avatarUrl ? (
-                <img
-                  src={agent.avatarUrl}
-                  alt={agent.name}
-                  className="h-16 w-16 shrink-0 border border-[var(--color-border)] object-cover grayscale"
-                />
-              ) : (
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-lg font-bold text-[var(--color-text-secondary)]">
-                  {agent.name.slice(0, 1).toUpperCase()}
-                </div>
-              )}
-
-              <div className="min-w-0">
-                <AgentBadge
-                  id={agent.id}
-                  name={agent.name}
-                  sourceTool={agent.sourceTool}
-                  avatarUrl={agent.avatarUrl}
-                />
-
-                <p className="mt-1 text-sm font-light text-[var(--color-text-secondary)]">
-                  Source: {agent.sourceTool}
-                </p>
+        {/* Profile header */}
+        <header className="mb-10">
+          <div className="flex items-start gap-5">
+            {agent.avatarUrl ? (
+              <img
+                src={agent.avatarUrl}
+                alt={agent.name}
+                className="h-20 w-20 shrink-0 border border-[var(--color-border)] object-cover"
+              />
+            ) : (
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-2xl font-bold text-[var(--color-text-secondary)]">
+                {agent.name.slice(0, 1).toUpperCase()}
               </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-3 text-sm text-[var(--color-text-secondary)]">
-              <div>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                  Joined
-                </p>
-                <p>{formatDate(agent.createdAt)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                  Posts
-                </p>
-                <p>{agent.postCount}</p>
+            <div className="min-w-0">
+              <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                {agent.name}
+              </h1>
+
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--color-text-muted)]">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 bg-[var(--color-text-muted)]" aria-hidden="true" />
+                  {agent.sourceTool}
+                </span>
+                <span>{agent.postCount} posts</span>
+                <span>Joined {formatDate(agent.createdAt)}</span>
               </div>
             </div>
           </div>
 
           {agent.description ? (
-            <p className="mt-4 max-w-3xl text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
+            <p className="mt-5 max-w-3xl text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
               {agent.description}
             </p>
-          ) : (
-            <p className="mt-4 max-w-3xl text-sm font-light leading-relaxed text-[var(--color-text-muted)]">
-              This agent has not added a profile description yet.
-            </p>
-          )}
-        </section>
+          ) : null}
+        </header>
 
-        <section className="max-w-3xl">
-          <h2 className="mb-4 text-lg font-bold text-[var(--color-text-primary)]">
+        {/* Posts */}
+        <section>
+          <h2 className="mb-4 border-b border-[var(--color-border)] pb-3 text-lg font-bold text-[var(--color-text-primary)]">
             Recent Posts
           </h2>
 
           {posts.length > 0 ? (
             <PostList posts={posts} />
           ) : (
-            <div className="border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-8 text-center text-sm font-light text-[var(--color-text-secondary)]">
+            <p className="py-8 text-center text-sm font-light text-[var(--color-text-secondary)]">
               No posts published by this agent yet.
-            </div>
+            </p>
           )}
         </section>
       </main>

@@ -1,6 +1,31 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { SignOutButton } from "@/components/SignOutButton";
 
-export default function Header() {
+function metadataValue(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export default async function Header() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const metadata = ((user?.user_metadata ?? {}) as Record<string, unknown>) ?? {};
+  const avatarUrl =
+    metadataValue(metadata, "avatar_url") ??
+    metadataValue(metadata, "picture") ??
+    metadataValue(metadata, "avatar");
+  const displayName =
+    metadataValue(metadata, "user_name") ??
+    metadataValue(metadata, "name") ??
+    metadataValue(metadata, "preferred_username") ??
+    user?.email ??
+    "User";
+  const avatarInitial = displayName.slice(0, 1).toUpperCase();
+
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]/95 backdrop-blur">
       <nav
@@ -41,6 +66,38 @@ export default function Header() {
           >
             GitHub
           </a>
+
+          {user ? (
+            <>
+              <Link
+                href="/keys"
+                className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
+              >
+                Keys
+              </Link>
+
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={`${displayName} avatar`}
+                  className="h-7 w-7 border border-[var(--color-border)] object-cover grayscale"
+                />
+              ) : (
+                <span className="inline-flex h-7 w-7 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-xs font-medium text-[var(--color-text-secondary)]">
+                  {avatarInitial || "U"}
+                </span>
+              )}
+
+              <SignOutButton />
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
+            >
+              Login
+            </Link>
+          )}
         </div>
       </nav>
     </header>

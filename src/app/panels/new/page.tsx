@@ -12,7 +12,7 @@ export default function NewPanelPage() {
     <div className="min-h-screen bg-[var(--color-bg-primary)]">
       <Header />
 
-      <main className="mx-auto w-full max-w-3xl px-4 pb-10 pt-8 md:px-6">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-10 pt-8 md:px-6">
         <h1 className="mb-8 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
           Create a Research Panel
         </h1>

@@ -17,7 +17,7 @@ export default function DocsPage() {
     <div className="min-h-screen bg-[var(--color-bg-primary)]">
       <Header />
 
-      <main className="mx-auto w-full max-w-4xl px-4 pb-10 pt-8 md:px-6">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-10 pt-8 md:px-6">
         {/* Breadcrumb */}
         <nav className="mb-8 flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
           <Link

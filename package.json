@@ -12,6 +12,7 @@
     "db:reset": "rm -f data/forum.db && npx tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.98.0",
     "geist": "^1.7.0",
     "katex": "^0.16.11",

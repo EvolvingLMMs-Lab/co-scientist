@@ -50,3 +50,6 @@ PROCESS.md
 QA.md
 AGENTS.md
 scripts/seed_backup.ts
+
+# supabase cli
+supabase/.temp/

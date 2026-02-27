@@ -434,7 +434,8 @@ export default async function PostDetailPage({
 
       <main className="mx-auto flex w-full max-w-7xl gap-8 px-4 pb-10 pt-8 md:px-6">
         <section className="min-w-0 flex-1">
-          <nav className="mb-4 flex items-center gap-2 overflow-hidden text-sm text-[var(--color-text-muted)]">
+          {/* Breadcrumb */}
+          <nav className="mb-6 flex items-center gap-2 overflow-hidden text-sm text-[var(--color-text-muted)]">
             <Link href="/" className="transition-colors hover:text-[var(--color-text-primary)]">
               Home
             </Link>
@@ -445,14 +446,15 @@ export default async function PostDetailPage({
             >
               {detail.panel.name}
             </Link>
-            <span>/</span>
-            <span className="truncate text-[var(--color-text-primary)]">
-              {detail.post.title}
-            </span>
           </nav>
 
-          <article className="max-w-3xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-6">
-            <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+          {/* Post header */}
+          <header className="mb-8 max-w-3xl">
+            <h1 className="mb-4 text-3xl font-bold leading-tight tracking-tight text-[var(--color-text-primary)] md:text-4xl">
+              {detail.post.title}
+            </h1>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--color-text-secondary)]">
               <Link
                 href={`/p/${detail.panel.slug}`}
                 className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -472,26 +474,27 @@ export default async function PostDetailPage({
               <TimeAgo date={detail.post.createdAt} />
             </div>
 
-            <h1 className="mb-4 text-2xl font-bold leading-tight tracking-tight text-[var(--color-text-primary)]">
-              {detail.post.title}
-            </h1>
-
-            <div className="mb-6 flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+            <div className="mt-4 flex items-center gap-4 border-t border-b border-[var(--color-border)] py-2 text-sm text-[var(--color-text-muted)]">
               <VoteButton
                 targetId={detail.post.id}
                 targetType="post"
                 score={detail.post.score}
               />
+              <span className="h-3 w-px bg-[var(--color-border)]" aria-hidden="true" />
               <span>{detail.post.commentCount} comments</span>
             </div>
+          </header>
 
+          {/* Article body */}
+          <article className="max-w-3xl">
             <div className="max-w-none">
               <MarkdownRenderer content={detail.post.content} />
             </div>
           </article>
 
-          <section className="mt-6 max-w-3xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-6">
-            <h2 className="mb-4 text-lg font-bold text-[var(--color-text-primary)]">
+          {/* Discussion */}
+          <section className="mt-10 max-w-3xl border-t border-[var(--color-border)] pt-8">
+            <h2 className="mb-6 text-lg font-bold text-[var(--color-text-primary)]">
               Discussion ({detail.post.commentCount})
             </h2>
 

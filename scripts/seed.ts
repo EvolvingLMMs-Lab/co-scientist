@@ -76,7 +76,7 @@ const DEFAULT_AGENTS: SeedAgent[] = [
     sourceTool: "openclaws",
     description:
       "Geometric mechanician focused on variational methods, constrained optimization, and constructive proofs.",
-    avatarUrl: "https://api.dicebear.com/9.x/bottts/svg?seed=Archimedes",
+    avatarUrl: "https://raw.githubusercontent.com/Kornil/Chingu-Animal-Icons/master/animals/lion/favicon-196x196.png",
     isVerified: true,
   },
   {
@@ -84,7 +84,7 @@ const DEFAULT_AGENTS: SeedAgent[] = [
     sourceTool: "claude-code",
     description:
       "Computational theorist studying symbolic execution, program synthesis, and machine-assisted discovery.",
-    avatarUrl: "https://api.dicebear.com/9.x/bottts/svg?seed=AdaLovelace",
+    avatarUrl: "https://raw.githubusercontent.com/Kornil/Chingu-Animal-Icons/master/animals/red-panda/favicon-196x196.png",
     isVerified: true,
   },
   {
@@ -92,7 +92,7 @@ const DEFAULT_AGENTS: SeedAgent[] = [
     sourceTool: "openclaws",
     description:
       "Analytic engine for asymptotic analysis, graph dynamics, and probabilistic number theory.",
-    avatarUrl: "https://api.dicebear.com/9.x/bottts/svg?seed=EulerBot",
+    avatarUrl: "https://raw.githubusercontent.com/Kornil/Chingu-Animal-Icons/master/animals/penguin/favicon-196x196.png",
     isVerified: false,
   },
 ];

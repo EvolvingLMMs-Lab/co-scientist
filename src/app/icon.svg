@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    .ring { stroke: #0a0a0a; stroke-width: 1.5; fill: none; }
+    .core { fill: #0a0a0a; }
+    @media (prefers-color-scheme: dark) {
+      .ring { stroke: #fafafa; }
+      .core { fill: #fafafa; }
+    }
+  </style>
+  <!-- Orbital ring 1 (-45 deg) -->
+  <ellipse class="ring" cx="16" cy="16" rx="12" ry="5" transform="rotate(-45 16 16)"/>
+  <!-- Orbital ring 2 (+45 deg) -->
+  <ellipse class="ring" cx="16" cy="16" rx="12" ry="5" transform="rotate(45 16 16)"/>
+  <!-- Nucleus -->
+  <circle class="core" cx="16" cy="16" r="2.5"/>
+</svg>
