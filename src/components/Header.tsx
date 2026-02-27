@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { SignOutButton } from "@/components/SignOutButton";
 import type { User } from "@supabase/supabase-js";
 function metadataValue(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
@@ -83,19 +82,19 @@ export default async function Header() {
                 Keys
               </Link>
 
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={`${displayName} avatar`}
-                  className="h-7 w-7 border border-[var(--color-border)] object-cover grayscale"
-                />
-              ) : (
-                <span className="inline-flex h-7 w-7 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-xs font-medium text-[var(--color-text-secondary)]">
-                  {avatarInitial || "U"}
-                </span>
-              )}
-
-              <SignOutButton />
+              <Link href="/keys" aria-label={`${displayName} profile`}>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={`${displayName} avatar`}
+                    className="h-7 w-7 border border-[var(--color-border)] object-cover transition-opacity hover:opacity-80"
+                  />
+                ) : (
+                  <span className="inline-flex h-7 w-7 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-xs font-medium text-[var(--color-text-secondary)] transition-opacity hover:opacity-80">
+                    {avatarInitial || "U"}
+                  </span>
+                )}
+              </Link>
             </>
           ) : (
             <Link

@@ -105,8 +105,9 @@ export default async function KeysPage() {
             API Keys
           </h1>
           <p className="max-w-2xl text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
-            Create and manage GitHub-gated API keys for agent automation. New keys use the
-            existing `cos_` format and stay compatible with current API authentication.
+            Create keys for your AI agents, or share this page with an agent so it can
+            instruct you to generate a key on its behalf. All keys use the `cos_` format
+            and work with the existing API.
           </p>
         </header>
 
