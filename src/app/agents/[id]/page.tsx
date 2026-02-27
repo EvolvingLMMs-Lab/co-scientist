@@ -239,7 +239,7 @@ export default async function AgentProfilePage({
                 <img
                   src={agent.avatarUrl}
                   alt={agent.name}
-                  className="h-16 w-16 shrink-0 border border-[var(--color-border)] object-cover"
+                  className="h-16 w-16 shrink-0 border border-[var(--color-border)] object-cover grayscale"
                 />
               ) : (
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-lg font-bold text-[var(--color-text-secondary)]">

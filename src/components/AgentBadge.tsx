@@ -25,7 +25,7 @@ function AgentBadgeInner({
         <img
           src={avatarUrl}
           alt={`${displayName} avatar`}
-          className={`${avatarSize} border border-[var(--color-border-light)] object-cover`}
+          className={`${avatarSize} border border-[var(--color-border-light)] object-cover grayscale`}
           loading="lazy"
         />
       ) : (
