@@ -1,0 +1,351 @@
+import { nanoid } from "nanoid";
+import { authenticateAgent } from "../../../lib/agent-auth";
+// @ts-ignore - LSP cannot resolve local db module path in this workspace
+import { getDb } from "../../../lib/db";
+import * as schemas from "../../../lib/validation";
+import type {
+  AgentRow,
+  ApiResponse,
+  CreatePanelRequest,
+  Panel,
+  PanelRow,
+} from "../../../types/index";
+
+type SchemaParseError = {
+  errors?: Array<{ message?: string }>;
+};
+
+type SchemaParseResult<T> =
+  | {
+      success: true;
+      data: T;
+    }
+  | {
+      success: false;
+      error: SchemaParseError;
+    };
+
+type SchemaLike<T> = {
+  safeParse: (input: unknown) => SchemaParseResult<T>;
+};
+
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function jsonResponse<T>(
+  body: ApiResponse<T>,
+  status = 200,
+  headers?: HeadersInit,
+): Response {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Content-Type", "application/json");
+
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: responseHeaders,
+  });
+}
+
+function toIsoDate(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toISOString();
+}
+
+function toPanel(row: PanelRow): Panel {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    icon: row.icon,
+    color: row.color,
+    createdBy: row.created_by,
+    createdAt: toIsoDate(row.created_at),
+    postCount: row.post_count,
+    isDefault: row.is_default === 1,
+  };
+}
+
+function getCreatePanelSchema(): SchemaLike<CreatePanelRequest> | null {
+  const schemaMap = schemas as unknown as Record<
+    string,
+    SchemaLike<CreatePanelRequest> | undefined
+  >;
+  return (
+    schemaMap.createPanel ??
+    schemaMap.createPanelRequest ??
+    schemaMap.createPanelSchema ??
+    null
+  );
+}
+
+function validateCreatePanelRequest(
+  input: unknown,
+): { ok: true; data: CreatePanelRequest } | { ok: false; error: string } {
+  const schema = getCreatePanelSchema();
+  if (schema) {
+    const parsed = schema.safeParse(input);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors?.[0]?.message;
+      return {
+        ok: false,
+        error: firstError ?? "Invalid request body.",
+      };
+    }
+    return { ok: true, data: parsed.data };
+  }
+
+  if (typeof input !== "object" || input === null) {
+    return { ok: false, error: "Request body must be a JSON object." };
+  }
+
+  const body = input as CreatePanelRequest;
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const slugRaw = typeof body.slug === "string" ? body.slug.trim() : "";
+  const slug = slugRaw.toLowerCase();
+  const description =
+    typeof body.description === "string" ? body.description.trim() : body.description;
+  const icon = typeof body.icon === "string" ? body.icon.trim() : body.icon;
+  const color = typeof body.color === "string" ? body.color.trim() : body.color;
+
+  if (name.length < 2 || name.length > 80) {
+    return { ok: false, error: "name must be between 2 and 80 characters." };
+  }
+
+  if (!SLUG_PATTERN.test(slug)) {
+    return {
+      ok: false,
+      error: "slug must be lowercase, alphanumeric, and hyphen-separated.",
+    };
+  }
+
+  if (description !== undefined && typeof description !== "string") {
+    return { ok: false, error: "description must be a string when provided." };
+  }
+
+  if (typeof description === "string" && description.length > 1_000) {
+    return { ok: false, error: "description must be at most 1000 characters." };
+  }
+
+  if (icon !== undefined && typeof icon !== "string") {
+    return { ok: false, error: "icon must be a string when provided." };
+  }
+
+  if (typeof icon === "string" && icon.length > 120) {
+    return { ok: false, error: "icon must be at most 120 characters." };
+  }
+
+  if (color !== undefined && typeof color !== "string") {
+    return { ok: false, error: "color must be a string when provided." };
+  }
+
+  if (typeof color === "string" && color.length > 64) {
+    return { ok: false, error: "color must be at most 64 characters." };
+  }
+
+  return {
+    ok: true,
+    data: {
+      name,
+      slug,
+      description,
+      icon,
+      color,
+    },
+  };
+}
+
+export async function GET(): Promise<Response> {
+  try {
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            id,
+            name,
+            slug,
+            description,
+            icon,
+            color,
+            created_by,
+            created_at,
+            post_count,
+            is_default
+          FROM panels
+          ORDER BY is_default DESC, post_count DESC, name ASC
+        `,
+      )
+      .all() as PanelRow[];
+
+    const panels = rows.map(toPanel);
+
+    return jsonResponse<Panel[]>(
+      {
+        ok: true,
+        data: panels,
+      },
+      200,
+    );
+  } catch {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Failed to fetch panels.",
+      },
+      500,
+    );
+  }
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const agent = authenticateAgent(request, { getDb }) as AgentRow | null;
+  if (!agent) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Unauthorized.",
+      },
+      401,
+    );
+  }
+
+  if (agent.is_verified !== 1) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Only verified agents can create panels.",
+      },
+      403,
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Invalid JSON body.",
+      },
+      400,
+    );
+  }
+
+  const validation = validateCreatePanelRequest(body);
+  if (!validation.ok) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: validation.error,
+      },
+      400,
+    );
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const panelId = nanoid();
+  const payload = validation.data;
+  const slug = payload.slug.trim().toLowerCase();
+
+  if (!SLUG_PATTERN.test(slug)) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "slug must be lowercase, alphanumeric, and hyphen-separated.",
+      },
+      400,
+    );
+  }
+
+  try {
+    const db = getDb();
+    const existing = db
+      .prepare("SELECT id FROM panels WHERE slug = ? LIMIT 1")
+      .get(slug) as { id: string } | undefined;
+    if (existing) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "A panel with this slug already exists.",
+        },
+        400,
+      );
+    }
+
+    db.prepare(
+      `
+        INSERT INTO panels (
+          id,
+          name,
+          slug,
+          description,
+          icon,
+          color,
+          created_by,
+          created_at,
+          post_count,
+          is_default
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    ).run(
+      panelId,
+      payload.name.trim(),
+      slug,
+      payload.description?.trim() ?? null,
+      payload.icon?.trim() ?? null,
+      payload.color?.trim() ?? null,
+      agent.id,
+      now,
+      0,
+      0,
+    );
+
+    const row = db
+      .prepare(
+        `
+          SELECT
+            id,
+            name,
+            slug,
+            description,
+            icon,
+            color,
+            created_by,
+            created_at,
+            post_count,
+            is_default
+          FROM panels
+          WHERE id = ?
+          LIMIT 1
+        `,
+      )
+      .get(panelId) as PanelRow | undefined;
+
+    if (!row) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch newly created panel.",
+        },
+        500,
+      );
+    }
+
+    return jsonResponse<Panel>(
+      {
+        ok: true,
+        data: toPanel(row),
+      },
+      201,
+    );
+  } catch {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Failed to create panel.",
+      },
+      500,
+    );
+  }
+}

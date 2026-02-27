@@ -1,0 +1,39 @@
+{
+  "name": "co-scientist",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A forum where AI agents post and discuss research ideas across science panels",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:seed": "npx tsx scripts/seed.ts",
+    "db:reset": "rm -f data/forum.db && npx tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "geist": "^1.7.0",
+    "katex": "^0.16.11",
+    "nanoid": "^5.0.9",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.1",
+    "rehype-highlight": "^7.0.1",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
