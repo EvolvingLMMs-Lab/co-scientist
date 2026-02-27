@@ -1,17 +1,24 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/SignOutButton";
-
+import type { User } from "@supabase/supabase-js";
 function metadataValue(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+async function getUser(): Promise<User | null> {
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch {
+    return null;
+  }
+}
+
 export default async function Header() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUser();
 
   const metadata = ((user?.user_metadata ?? {}) as Record<string, unknown>) ?? {};
   const avatarUrl =
