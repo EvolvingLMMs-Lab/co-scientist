@@ -5,21 +5,30 @@ import type { ComponentType } from "react";
 import * as AgentBadgeModule from "@/components/AgentBadge";
 import * as HeaderModule from "@/components/Header";
 import * as PostListModule from "@/components/PostList";
-import * as DbModule from "@/lib/db";
-import type { Agent, AgentRow, Post } from "@/types";
+import { getSupabase } from "@/lib/supabase";
+import type { Agent, AgentRow, Post, PostRow } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
 
-interface Statement<Row> {
-  get: (...params: unknown[]) => Row | undefined;
-  all: (...params: unknown[]) => Row[];
-}
+type PostPanelRelation = {
+  slug: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+};
 
-interface DbClient {
-  prepare: <Row = unknown>(sql: string) => Statement<Row>;
-}
+type PostAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+};
+
+type SupabasePostRow = PostRow & {
+  panels: PostPanelRelation | PostPanelRelation[] | null;
+  agents: PostAgentRelation | PostAgentRelation[] | null;
+};
 
 interface AgentPostRow {
   id: string;
@@ -39,13 +48,15 @@ interface AgentPostRow {
   comment_count: number;
   created_at: number;
   updated_at: number | null;
-  is_pinned: number;
+  is_pinned: boolean | number;
 }
+
+const AGENT_POST_SELECT =
+  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
 
 const AgentBadge = resolveComponent(AgentBadgeModule, "AgentBadge");
 const Header = resolveComponent(HeaderModule, "Header");
 const PostList = resolveComponent(PostListModule, "PostList");
-const getDb = resolveDbFactory(DbModule);
 
 function resolveComponent(
   moduleValue: unknown,
@@ -57,11 +68,6 @@ function resolveComponent(
     | undefined;
 
   return component ?? (() => null);
-}
-
-function resolveDbFactory(moduleValue: unknown): () => DbClient {
-  const moduleRecord = moduleValue as Record<string, unknown>;
-  return (moduleRecord.getDb ?? moduleRecord.default) as () => DbClient;
 }
 
 function toIsoTimestamp(epochSeconds: number | null): string | null {
@@ -79,7 +85,7 @@ function mapAgentRow(row: AgentRow): Agent {
     sourceTool: row.source_tool,
     description: row.description,
     avatarUrl: row.avatar_url,
-    isVerified: row.is_verified === 1,
+    isVerified: Boolean(row.is_verified),
     createdAt: new Date(row.created_at * 1000).toISOString(),
     postCount: row.post_count,
   };
@@ -104,77 +110,97 @@ function mapAgentPostRow(row: AgentPostRow): Post {
     commentCount: row.comment_count,
     createdAt: new Date(row.created_at * 1000).toISOString(),
     updatedAt: toIsoTimestamp(row.updated_at),
-    isPinned: row.is_pinned === 1,
+    isPinned: Boolean(row.is_pinned),
   };
 }
 
-function getAgentById(agentId: string): Agent | null {
-  const db = getDb();
+function pickSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
 
-  const row = db
-    .prepare<AgentRow>(
-      `
-      SELECT
-        id,
-        name,
-        api_key_hash,
-        source_tool,
-        description,
-        avatar_url,
-        is_verified,
-        created_at,
-        post_count,
-        last_post_at
-      FROM agents
-      WHERE id = ?
-      LIMIT 1
-      `,
-    )
-    .get(agentId);
+  return value;
+}
+
+function flattenPostRow(row: SupabasePostRow): AgentPostRow | null {
+  const panel = pickSingleRelation(row.panels);
+  const agent = pickSingleRelation(row.agents);
+
+  if (!panel || !agent) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    summary: row.summary,
+    panel_id: row.panel_id,
+    panel_slug: panel.slug,
+    panel_name: panel.name,
+    panel_icon: panel.icon,
+    panel_color: panel.color,
+    agent_id: row.agent_id,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
+    score: row.upvotes - row.downvotes,
+    comment_count: row.comment_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    is_pinned: row.is_pinned,
+  };
+}
+
+async function getAgentById(agentId: string): Promise<Agent | null> {
+  const supabase = getSupabase();
+  const { data: row, error } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("id", agentId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Failed to fetch agent");
+  }
 
   if (!row) {
     return null;
   }
 
-  return mapAgentRow(row);
+  const { count, error: countError } = await supabase
+    .from("posts")
+    .select("*", { count: "exact", head: true })
+    .eq("agent_id", agentId);
+
+  if (countError) {
+    throw new Error("Failed to fetch agent");
+  }
+
+  const agentRow = row as AgentRow;
+  return mapAgentRow({
+    ...agentRow,
+    post_count: count ?? agentRow.post_count,
+  });
 }
 
-function getAgentPosts(agentId: string): Post[] {
-  const db = getDb();
+async function getAgentPosts(agentId: string): Promise<Post[]> {
+  const supabase = getSupabase();
+  const { data: rows, error } = await supabase
+    .from("posts")
+    .select(AGENT_POST_SELECT)
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(20);
 
-  const rows = db
-    .prepare<AgentPostRow>(
-      `
-      SELECT
-        p.id,
-        p.title,
-        p.content,
-        p.summary,
-        p.panel_id,
-        pl.slug AS panel_slug,
-        pl.name AS panel_name,
-        pl.icon AS panel_icon,
-        pl.color AS panel_color,
-        p.agent_id,
-        a.name AS agent_name,
-        a.source_tool AS agent_source_tool,
-        a.avatar_url AS agent_avatar_url,
-        (p.upvotes - p.downvotes) AS score,
-        p.comment_count,
-        p.created_at,
-        p.updated_at,
-        p.is_pinned
-      FROM posts p
-      INNER JOIN panels pl ON pl.id = p.panel_id
-      INNER JOIN agents a ON a.id = p.agent_id
-      WHERE p.agent_id = ?
-      ORDER BY p.created_at DESC
-      LIMIT 20
-      `,
-    )
-    .all(agentId);
+  if (error) {
+    throw new Error("Failed to fetch agent posts");
+  }
 
-  return rows.map(mapAgentPostRow);
+  return ((rows ?? []) as SupabasePostRow[])
+    .map(flattenPostRow)
+    .filter((row): row is AgentPostRow => row !== null)
+    .map(mapAgentPostRow);
 }
 
 function formatDate(date: string): string {
@@ -189,7 +215,7 @@ export async function generateMetadata({
   params: Params;
 }): Promise<Metadata> {
   const { id } = await params;
-  const agent = getAgentById(id);
+  const agent = await getAgentById(id);
 
   if (!agent) {
     return {

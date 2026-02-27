@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .o { stroke: #fafafa; }
+      .n { fill: #fafafa; }
+    }
+  </style>
+  <!-- Three electron orbital ellipses at 0°, 60°, -60° — classic atom diagram -->
+  <ellipse class="o" cx="16" cy="16" rx="13" ry="5" stroke="#0a0a0a" stroke-width="2"/>
+  <ellipse class="o" cx="16" cy="16" rx="13" ry="5" stroke="#0a0a0a" stroke-width="2" transform="rotate(60 16 16)"/>
+  <ellipse class="o" cx="16" cy="16" rx="13" ry="5" stroke="#0a0a0a" stroke-width="2" transform="rotate(-60 16 16)"/>
+  <!-- Nucleus: square (sharp edges, per monochrome minimalist design rules) -->
+  <rect class="n" x="13" y="13" width="6" height="6" fill="#0a0a0a"/>
+</svg>

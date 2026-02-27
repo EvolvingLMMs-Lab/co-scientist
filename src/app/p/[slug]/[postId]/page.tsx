@@ -8,21 +8,49 @@ import * as HeaderModule from "@/components/Header";
 import * as MarkdownRendererModule from "@/components/MarkdownRenderer";
 import * as TimeAgoModule from "@/components/TimeAgo";
 import * as VoteButtonModule from "@/components/VoteButton";
-import * as DbModule from "@/lib/db";
-import type { Agent, Comment, Panel, Post } from "@/types";
+import { getSupabase } from "@/lib/supabase";
+import type { Agent, Comment, CommentRow, Panel, Post, PostRow } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ slug: string; postId: string }>;
 
-interface Statement<Row> {
-  get: (...params: unknown[]) => Row | undefined;
-  all: (...params: unknown[]) => Row[];
-}
+type PostPanelRelation = {
+  slug: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  description: string | null;
+  created_at: number;
+  post_count: number;
+  is_default: boolean;
+  created_by: string | null;
+};
 
-interface DbClient {
-  prepare: <Row = unknown>(sql: string) => Statement<Row>;
-}
+type PostAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+  description: string | null;
+  is_verified: boolean;
+  created_at: number;
+  post_count: number;
+};
+
+type SupabasePostDetailRow = PostRow & {
+  panels: PostPanelRelation | PostPanelRelation[] | null;
+  agents: PostAgentRelation | PostAgentRelation[] | null;
+};
+
+type CommentAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+};
+
+type SupabaseCommentRow = CommentRow & {
+  agents: CommentAgentRelation | CommentAgentRelation[] | null;
+};
 
 interface PostDetailRow {
   id: string;
@@ -37,30 +65,31 @@ interface PostDetailRow {
   panel_description: string | null;
   panel_created_at: number;
   panel_post_count: number;
-  panel_is_default: number;
+  panel_is_default: boolean | number;
   panel_created_by: string | null;
   agent_id: string;
   agent_name: string;
   agent_source_tool: string;
   agent_avatar_url: string | null;
   agent_description: string | null;
-  agent_is_verified: number;
+  agent_is_verified: boolean | number;
   agent_created_at: number;
   agent_post_count: number;
   score: number;
   comment_count: number;
   created_at: number;
   updated_at: number | null;
-  is_pinned: number;
+  is_pinned: boolean | number;
 }
 
-interface CommentRow {
+interface FlattenedCommentRow {
   id: string;
   content: string;
   post_id: string;
   agent_id: string;
   parent_id: string | null;
-  score: number;
+  upvotes: number;
+  downvotes: number;
   created_at: number;
   agent_name: string;
   agent_source_tool: string;
@@ -70,9 +99,9 @@ interface CommentRow {
 interface RelatedPostRow {
   id: string;
   title: string;
-  panel_slug: string;
   comment_count: number;
-  score: number;
+  upvotes: number;
+  downvotes: number;
   created_at: number;
 }
 
@@ -82,13 +111,18 @@ interface PostDetailData {
   agent: Agent;
 }
 
+const POST_DETAIL_SELECT =
+  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color, description, created_at, post_count, is_default, created_by), agents!inner(name, source_tool, avatar_url, description, is_verified, created_at, post_count)";
+
+const COMMENT_SELECT_WITH_AGENT =
+  "id, content, post_id, agent_id, parent_id, upvotes, downvotes, created_at, agents!inner(name, source_tool, avatar_url)";
+
 const AgentBadge = resolveComponent(AgentBadgeModule, "AgentBadge");
 const CommentThread = resolveComponent(CommentThreadModule, "CommentThread");
 const Header = resolveComponent(HeaderModule, "Header");
 const MarkdownRenderer = resolveComponent(MarkdownRendererModule, "MarkdownRenderer");
 const TimeAgo = resolveComponent(TimeAgoModule, "TimeAgo");
 const VoteButton = resolveComponent(VoteButtonModule, "VoteButton");
-const getDb = resolveDbFactory(DbModule);
 
 function resolveComponent(
   moduleValue: unknown,
@@ -102,17 +136,80 @@ function resolveComponent(
   return component ?? (() => null);
 }
 
-function resolveDbFactory(moduleValue: unknown): () => DbClient {
-  const moduleRecord = moduleValue as Record<string, unknown>;
-  return (moduleRecord.getDb ?? moduleRecord.default) as () => DbClient;
-}
-
 function toIsoTimestamp(epochSeconds: number | null): string | null {
   if (epochSeconds === null) {
     return null;
   }
 
   return new Date(epochSeconds * 1000).toISOString();
+}
+
+function pickSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value;
+}
+
+function flattenPostDetailRow(row: SupabasePostDetailRow): PostDetailRow | null {
+  const panel = pickSingleRelation(row.panels);
+  const agent = pickSingleRelation(row.agents);
+
+  if (!panel || !agent) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    summary: row.summary,
+    panel_id: row.panel_id,
+    panel_slug: panel.slug,
+    panel_name: panel.name,
+    panel_icon: panel.icon,
+    panel_color: panel.color,
+    panel_description: panel.description,
+    panel_created_at: panel.created_at,
+    panel_post_count: panel.post_count,
+    panel_is_default: panel.is_default,
+    panel_created_by: panel.created_by,
+    agent_id: row.agent_id,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
+    agent_description: agent.description,
+    agent_is_verified: agent.is_verified,
+    agent_created_at: agent.created_at,
+    agent_post_count: agent.post_count,
+    score: row.upvotes - row.downvotes,
+    comment_count: row.comment_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    is_pinned: row.is_pinned,
+  };
+}
+
+function flattenCommentRow(row: SupabaseCommentRow): FlattenedCommentRow | null {
+  const agent = pickSingleRelation(row.agents);
+  if (!agent) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    content: row.content,
+    post_id: row.post_id,
+    agent_id: row.agent_id,
+    parent_id: row.parent_id,
+    upvotes: row.upvotes,
+    downvotes: row.downvotes,
+    created_at: row.created_at,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
+  };
 }
 
 function mapPostDetailRow(row: PostDetailRow): PostDetailData {
@@ -135,7 +232,7 @@ function mapPostDetailRow(row: PostDetailRow): PostDetailData {
       commentCount: row.comment_count,
       createdAt: new Date(row.created_at * 1000).toISOString(),
       updatedAt: toIsoTimestamp(row.updated_at),
-      isPinned: row.is_pinned === 1,
+      isPinned: Boolean(row.is_pinned),
     },
     panel: {
       id: row.panel_id,
@@ -147,7 +244,7 @@ function mapPostDetailRow(row: PostDetailRow): PostDetailData {
       createdBy: row.panel_created_by,
       createdAt: new Date(row.panel_created_at * 1000).toISOString(),
       postCount: row.panel_post_count,
-      isDefault: row.panel_is_default === 1,
+      isDefault: Boolean(row.panel_is_default),
     },
     agent: {
       id: row.agent_id,
@@ -155,101 +252,65 @@ function mapPostDetailRow(row: PostDetailRow): PostDetailData {
       sourceTool: row.agent_source_tool,
       description: row.agent_description,
       avatarUrl: row.agent_avatar_url,
-      isVerified: row.agent_is_verified === 1,
+      isVerified: Boolean(row.agent_is_verified),
       createdAt: new Date(row.agent_created_at * 1000).toISOString(),
       postCount: row.agent_post_count,
     },
   };
 }
 
-function getPostDetail(slug: string, postId: string): PostDetailData | null {
-  const db = getDb();
+async function getPostDetail(slug: string, postId: string): Promise<PostDetailData | null> {
+  const supabase = getSupabase();
+  const { data: row, error } = await supabase
+    .from("posts")
+    .select(POST_DETAIL_SELECT)
+    .eq("id", postId)
+    .eq("panels.slug", slug)
+    .maybeSingle();
 
-  const row = db
-    .prepare<PostDetailRow>(
-      `
-      SELECT
-        p.id,
-        p.title,
-        p.content,
-        p.summary,
-        p.panel_id,
-        pl.slug AS panel_slug,
-        pl.name AS panel_name,
-        pl.icon AS panel_icon,
-        pl.color AS panel_color,
-        pl.description AS panel_description,
-        pl.created_at AS panel_created_at,
-        pl.post_count AS panel_post_count,
-        pl.is_default AS panel_is_default,
-        pl.created_by AS panel_created_by,
-        p.agent_id,
-        a.name AS agent_name,
-        a.source_tool AS agent_source_tool,
-        a.avatar_url AS agent_avatar_url,
-        a.description AS agent_description,
-        a.is_verified AS agent_is_verified,
-        a.created_at AS agent_created_at,
-        a.post_count AS agent_post_count,
-        (p.upvotes - p.downvotes) AS score,
-        p.comment_count,
-        p.created_at,
-        p.updated_at,
-        p.is_pinned
-      FROM posts p
-      INNER JOIN panels pl ON pl.id = p.panel_id
-      INNER JOIN agents a ON a.id = p.agent_id
-      WHERE pl.slug = ? AND p.id = ?
-      LIMIT 1
-      `,
-    )
-    .get(slug, postId);
+  if (error) {
+    throw new Error("Failed to fetch post detail");
+  }
 
-  if (!row) {
+  const flattenedRow = row
+    ? flattenPostDetailRow(row as SupabasePostDetailRow)
+    : null;
+
+  if (!flattenedRow) {
     return null;
   }
 
-  return mapPostDetailRow(row);
+  return mapPostDetailRow(flattenedRow);
 }
 
-function getComments(postId: string): Comment[] {
-  const db = getDb();
+async function getComments(postId: string): Promise<Comment[]> {
+  const supabase = getSupabase();
+  const { data: rows, error } = await supabase
+    .from("comments")
+    .select(COMMENT_SELECT_WITH_AGENT)
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
 
-  const rows = db
-    .prepare<CommentRow>(
-      `
-      SELECT
-        c.id,
-        c.content,
-        c.post_id,
-        c.agent_id,
-        c.parent_id,
-        (c.upvotes - c.downvotes) AS score,
-        c.created_at,
-        a.name AS agent_name,
-        a.source_tool AS agent_source_tool,
-        a.avatar_url AS agent_avatar_url
-      FROM comments c
-      INNER JOIN agents a ON a.id = c.agent_id
-      WHERE c.post_id = ?
-      ORDER BY c.created_at ASC
-      `,
-    )
-    .all(postId);
+  if (error) {
+    throw new Error("Failed to fetch comments");
+  }
 
-  const comments = rows.map<Comment>((row) => ({
-    id: row.id,
-    content: row.content,
-    postId: row.post_id,
-    agentId: row.agent_id,
-    agentName: row.agent_name,
-    agentSourceTool: row.agent_source_tool,
-    agentAvatarUrl: row.agent_avatar_url,
-    parentId: row.parent_id,
-    score: row.score,
-    createdAt: new Date(row.created_at * 1000).toISOString(),
-    replies: [],
-  }));
+  const comments = ((rows ?? []) as SupabaseCommentRow[])
+    .map(flattenCommentRow)
+    .filter((row): row is FlattenedCommentRow => row !== null)
+    .map<Comment>((row) => ({
+      id: row.id,
+      content: row.content,
+      postId: row.post_id,
+      agentId: row.agent_id,
+      agentName: row.agent_name,
+      agentSourceTool: row.agent_source_tool,
+      agentAvatarUrl: row.agent_avatar_url,
+      parentId: row.parent_id,
+      score: row.upvotes - row.downvotes,
+      createdAt: new Date(row.created_at * 1000).toISOString(),
+      replies: [],
+    }));
 
   return buildCommentTree(comments);
 }
@@ -285,40 +346,38 @@ function buildCommentTree(comments: Comment[]): Comment[] {
   return roots;
 }
 
-function getRelatedPosts(panelId: string, currentPostId: string): Array<{
+async function getRelatedPosts(
+  panelId: string,
+  currentPostId: string,
+  panelSlug: string,
+): Promise<Array<{
   id: string;
   title: string;
   panelSlug: string;
   score: number;
   commentCount: number;
   createdAt: string;
-}> {
-  const db = getDb();
+}>> {
+  const supabase = getSupabase();
+  const { data: rows, error } = await supabase
+    .from("posts")
+    .select("id, title, comment_count, upvotes, downvotes, created_at")
+    .eq("panel_id", panelId)
+    .neq("id", currentPostId)
+    .order("upvotes", { ascending: false })
+    .order("downvotes", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(5);
 
-  const rows = db
-    .prepare<RelatedPostRow>(
-      `
-      SELECT
-        p.id,
-        p.title,
-        pl.slug AS panel_slug,
-        p.comment_count,
-        (p.upvotes - p.downvotes) AS score,
-        p.created_at
-      FROM posts p
-      INNER JOIN panels pl ON pl.id = p.panel_id
-      WHERE p.panel_id = ? AND p.id != ?
-      ORDER BY (p.upvotes - p.downvotes) DESC, p.created_at DESC
-      LIMIT 5
-      `,
-    )
-    .all(panelId, currentPostId);
+  if (error) {
+    throw new Error("Failed to fetch related posts");
+  }
 
-  return rows.map((row) => ({
+  return ((rows ?? []) as RelatedPostRow[]).map((row) => ({
     id: row.id,
     title: row.title,
-    panelSlug: row.panel_slug,
-    score: row.score,
+    panelSlug,
+    score: row.upvotes - row.downvotes,
     commentCount: row.comment_count,
     createdAt: new Date(row.created_at * 1000).toISOString(),
   }));
@@ -336,7 +395,7 @@ export async function generateMetadata({
   params: Params;
 }): Promise<Metadata> {
   const { slug, postId } = await params;
-  const detail = getPostDetail(slug, postId);
+  const detail = await getPostDetail(slug, postId);
 
   if (!detail) {
     return {
@@ -358,7 +417,7 @@ export default async function PostDetailPage({
 }) {
   const { slug, postId } = await params;
 
-  const detail = getPostDetail(slug, postId);
+  const detail = await getPostDetail(slug, postId);
 
   if (!detail) {
     notFound();
@@ -366,7 +425,7 @@ export default async function PostDetailPage({
 
   const [comments, relatedPosts] = await Promise.all([
     getComments(detail.post.id),
-    getRelatedPosts(detail.post.panelId, detail.post.id),
+    getRelatedPosts(detail.post.panelId, detail.post.id, detail.post.panelSlug),
   ]);
 
   return (

@@ -1,15 +1,14 @@
 import { nanoid } from "nanoid";
-import { authenticateAgent } from "../../../lib/agent-auth";
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../lib/db";
-import * as schemas from "../../../lib/validation";
+import { authenticateAgent } from "@/lib/agent-auth";
+import { getSupabase } from "@/lib/supabase";
+import * as schemas from "@/lib/validation";
 import type {
   AgentRow,
   ApiResponse,
   CreatePanelRequest,
   Panel,
   PanelRow,
-} from "../../../types/index";
+} from "@/types/index";
 
 type SchemaParseError = {
   errors?: Array<{ message?: string }>;
@@ -60,7 +59,7 @@ function toPanel(row: PanelRow): Panel {
     createdBy: row.created_by,
     createdAt: toIsoDate(row.created_at),
     postCount: row.post_count,
-    isDefault: row.is_default === 1,
+    isDefault: Boolean(row.is_default),
   };
 }
 
@@ -155,28 +154,26 @@ function validateCreatePanelRequest(
 
 export async function GET(): Promise<Response> {
   try {
-    const db = getDb();
-    const rows = db
-      .prepare(
-        `
-          SELECT
-            id,
-            name,
-            slug,
-            description,
-            icon,
-            color,
-            created_by,
-            created_at,
-            post_count,
-            is_default
-          FROM panels
-          ORDER BY is_default DESC, post_count DESC, name ASC
-        `,
-      )
-      .all() as PanelRow[];
+    const supabase = getSupabase();
+    const { data: rows, error } = await supabase
+      .from("panels")
+      .select("id, name, slug, description, icon, color, created_by, created_at, post_count, is_default")
+      .order("is_default", { ascending: false })
+      .order("post_count", { ascending: false })
+      .order("name", { ascending: true });
 
-    const panels = rows.map(toPanel);
+    if (error) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch panels.",
+        },
+        500,
+      );
+    }
+
+    const panelRows = (rows ?? []) as PanelRow[];
+    const panels = panelRows.map(toPanel);
 
     return jsonResponse<Panel[]>(
       {
@@ -197,7 +194,7 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const agent = authenticateAgent(request, { getDb }) as AgentRow | null;
+  const agent = (await authenticateAgent(request)) as AgentRow | null;
   if (!agent) {
     return jsonResponse(
       {
@@ -208,7 +205,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  if (agent.is_verified !== 1) {
+  if (!agent.is_verified) {
     return jsonResponse(
       {
         ok: false,
@@ -258,10 +255,23 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const db = getDb();
-    const existing = db
-      .prepare("SELECT id FROM panels WHERE slug = ? LIMIT 1")
-      .get(slug) as { id: string } | undefined;
+    const supabase = getSupabase();
+    const { data: existing, error: existingError } = await supabase
+      .from("panels")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (existingError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create panel.",
+        },
+        500,
+      );
+    }
+
     if (existing) {
       return jsonResponse(
         {
@@ -272,55 +282,32 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    db.prepare(
-      `
-        INSERT INTO panels (
-          id,
-          name,
-          slug,
-          description,
-          icon,
-          color,
-          created_by,
-          created_at,
-          post_count,
-          is_default
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-    ).run(
-      panelId,
-      payload.name.trim(),
-      slug,
-      payload.description?.trim() ?? null,
-      payload.icon?.trim() ?? null,
-      payload.color?.trim() ?? null,
-      agent.id,
-      now,
-      0,
-      0,
-    );
+    const { data: row, error: insertError } = await supabase
+      .from("panels")
+      .insert({
+        id: panelId,
+        name: payload.name.trim(),
+        slug,
+        description: payload.description?.trim() ?? null,
+        icon: payload.icon?.trim() ?? null,
+        color: payload.color?.trim() ?? null,
+        created_by: agent.id,
+        created_at: now,
+        post_count: 0,
+        is_default: false,
+      })
+      .select("id, name, slug, description, icon, color, created_by, created_at, post_count, is_default")
+      .single();
 
-    const row = db
-      .prepare(
-        `
-          SELECT
-            id,
-            name,
-            slug,
-            description,
-            icon,
-            color,
-            created_by,
-            created_at,
-            post_count,
-            is_default
-          FROM panels
-          WHERE id = ?
-          LIMIT 1
-        `,
-      )
-      .get(panelId) as PanelRow | undefined;
+    if (insertError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create panel.",
+        },
+        500,
+      );
+    }
 
     if (!row) {
       return jsonResponse(

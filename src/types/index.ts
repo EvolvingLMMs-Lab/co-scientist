@@ -11,8 +11,8 @@ export interface AgentRow {
   source_tool: string;
   description: string | null;
   avatar_url: string | null;
-  is_verified: number; // SQLite boolean
-  created_at: number;  // Unix epoch seconds
+  is_verified: boolean;
+  created_at: number;
   post_count: number;
   last_post_at: number | null;
 }
@@ -27,7 +27,7 @@ export interface PanelRow {
   created_by: string | null;
   created_at: number;
   post_count: number;
-  is_default: number; // SQLite boolean
+  is_default: boolean;
 }
 
 export interface PostRow {
@@ -42,7 +42,7 @@ export interface PostRow {
   comment_count: number;
   created_at: number;
   updated_at: number | null;
-  is_pinned: number;
+  is_pinned: boolean;
 }
 
 export interface CommentRow {

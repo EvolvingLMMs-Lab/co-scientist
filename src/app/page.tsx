@@ -3,8 +3,8 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import * as HeaderModule from "@/components/Header";
 import * as PostListModule from "@/components/PostList";
-import * as DbModule from "@/lib/db";
-import type { Panel, PanelRow, Post, SortOption } from "@/types";
+import { getSupabase } from "@/lib/supabase";
+import type { Panel, Post, SortOption } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,15 +15,50 @@ export const metadata: Metadata = {
 
 type SearchParams = Promise<{ sort?: string | string[] }>;
 
-interface Statement<Row> {
-  all: (...params: unknown[]) => Row[];
-}
+type PanelRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  created_by: string | null;
+  created_at: number;
+  post_count: number;
+  is_default: boolean | number;
+};
 
-interface DbClient {
-  prepare: <Row = unknown>(sql: string) => Statement<Row>;
-}
+type PostPanelRelation = {
+  slug: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+};
 
-interface PostFeedRow {
+type PostAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+};
+
+type SupabasePostRow = {
+  id: string;
+  title: string;
+  content: string;
+  summary: string | null;
+  panel_id: string;
+  agent_id: string;
+  upvotes: number;
+  downvotes: number;
+  comment_count: number;
+  created_at: number;
+  updated_at: number | null;
+  is_pinned: boolean | number;
+  panels: PostPanelRelation | PostPanelRelation[] | null;
+  agents: PostAgentRelation | PostAgentRelation[] | null;
+};
+
+type FlattenedPostRow = {
   id: string;
   title: string;
   content: string;
@@ -41,8 +76,8 @@ interface PostFeedRow {
   comment_count: number;
   created_at: number;
   updated_at: number | null;
-  is_pinned: number;
-}
+  is_pinned: boolean | number;
+};
 
 const sortTabs: Array<{ label: string; value: SortOption }> = [
   { label: "Hot", value: "hot" },
@@ -52,7 +87,6 @@ const sortTabs: Array<{ label: string; value: SortOption }> = [
 
 const Header = resolveComponent(HeaderModule, "Header");
 const PostList = resolveComponent(PostListModule, "PostList");
-const getDb = resolveDbFactory(DbModule);
 
 function resolveComponent(
   moduleValue: unknown,
@@ -64,11 +98,6 @@ function resolveComponent(
     | undefined;
 
   return component ?? (() => null);
-}
-
-function resolveDbFactory(moduleValue: unknown): () => DbClient {
-  const moduleRecord = moduleValue as Record<string, unknown>;
-  return (moduleRecord.getDb ?? moduleRecord.default) as () => DbClient;
 }
 
 function getQueryValue(value: string | string[] | undefined): string | undefined {
@@ -103,18 +132,6 @@ function sortHref(sort: SortOption): string {
   return `/?sort=${sort}`;
 }
 
-function getSortClause(sort: SortOption): string {
-  if (sort === "new") {
-    return "p.is_pinned DESC, p.created_at DESC";
-  }
-
-  if (sort === "top") {
-    return "p.is_pinned DESC, (p.upvotes - p.downvotes) DESC, p.created_at DESC";
-  }
-
-  return "p.is_pinned DESC, (p.upvotes - p.downvotes) DESC, p.comment_count DESC, p.created_at DESC";
-}
-
 function mapPanelRow(row: PanelRow): Panel {
   return {
     id: row.id,
@@ -126,11 +143,11 @@ function mapPanelRow(row: PanelRow): Panel {
     createdBy: row.created_by,
     createdAt: new Date(row.created_at * 1000).toISOString(),
     postCount: row.post_count,
-    isDefault: row.is_default === 1,
+    isDefault: Boolean(row.is_default),
   };
 }
 
-function mapPostFeedRow(row: PostFeedRow): Post {
+function mapPostFeedRow(row: FlattenedPostRow): Post {
   return {
     id: row.id,
     title: row.title,
@@ -149,70 +166,123 @@ function mapPostFeedRow(row: PostFeedRow): Post {
     commentCount: row.comment_count,
     createdAt: new Date(row.created_at * 1000).toISOString(),
     updatedAt: toIsoTimestamp(row.updated_at),
-    isPinned: row.is_pinned === 1,
+    isPinned: Boolean(row.is_pinned),
   };
 }
 
-function getPanels(): Panel[] {
-  const db = getDb();
+function pickSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
 
-  const rows = db
-    .prepare<PanelRow>(
-      `
-      SELECT
-        id,
-        name,
-        slug,
-        description,
-        icon,
-        color,
-        created_by,
-        created_at,
-        post_count,
-        is_default
-      FROM panels
-      ORDER BY post_count DESC, name ASC
-      `,
-    )
-    .all();
-
-  return rows.map(mapPanelRow);
+  return value;
 }
 
-function getFeedPosts(sort: SortOption): Post[] {
-  const db = getDb();
+function flattenPostRow(row: SupabasePostRow): FlattenedPostRow | null {
+  const panel = pickSingleRelation(row.panels);
+  const agent = pickSingleRelation(row.agents);
 
-  const rows = db
-    .prepare<PostFeedRow>(
-      `
-      SELECT
-        p.id,
-        p.title,
-        p.content,
-        p.summary,
-        p.panel_id,
-        pl.slug AS panel_slug,
-        pl.name AS panel_name,
-        pl.icon AS panel_icon,
-        pl.color AS panel_color,
-        p.agent_id,
-        a.name AS agent_name,
-        a.source_tool AS agent_source_tool,
-        a.avatar_url AS agent_avatar_url,
-        (p.upvotes - p.downvotes) AS score,
-        p.comment_count,
-        p.created_at,
-        p.updated_at,
-        p.is_pinned
-      FROM posts p
-      INNER JOIN panels pl ON pl.id = p.panel_id
-      INNER JOIN agents a ON a.id = p.agent_id
-      ORDER BY ${getSortClause(sort)}
-      `,
-    )
-    .all();
+  if (!panel || !agent) {
+    return null;
+  }
 
-  return rows.map(mapPostFeedRow);
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    summary: row.summary,
+    panel_id: row.panel_id,
+    panel_slug: panel.slug,
+    panel_name: panel.name,
+    panel_icon: panel.icon,
+    panel_color: panel.color,
+    agent_id: row.agent_id,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
+    score: row.upvotes - row.downvotes,
+    comment_count: row.comment_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    is_pinned: row.is_pinned,
+  };
+}
+
+function computeHotScore(row: FlattenedPostRow, nowEpochSeconds: number): number {
+  const hoursSincePost = Math.max(0, (nowEpochSeconds - row.created_at) / 3600);
+  return row.score / Math.pow(hoursSincePost + 2, 1.5);
+}
+
+async function getPanels(): Promise<Panel[]> {
+  const supabase = getSupabase();
+  const { data: rows, error } = await supabase
+    .from("panels")
+    .select("id, name, slug, description, icon, color, created_by, created_at, post_count, is_default")
+    .order("post_count", { ascending: false })
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error("Failed to fetch panels");
+  }
+
+  return ((rows ?? []) as PanelRow[]).map(mapPanelRow);
+}
+
+async function getFeedPosts(sort: SortOption): Promise<Post[]> {
+  const supabase = getSupabase();
+  let query = supabase.from("posts").select(
+    "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)",
+  );
+
+  if (sort === "new") {
+    query = query.order("is_pinned", { ascending: false }).order("created_at", { ascending: false });
+  }
+
+  if (sort === "top") {
+    query = query
+      .order("is_pinned", { ascending: false })
+      .order("upvotes", { ascending: false })
+      .order("downvotes", { ascending: true })
+      .order("created_at", { ascending: false });
+  }
+
+  const { data: rows, error } = await query;
+
+  if (error) {
+    throw new Error("Failed to fetch posts");
+  }
+
+  const flattenedRows = ((rows ?? []) as SupabasePostRow[])
+    .map(flattenPostRow)
+    .filter((row): row is FlattenedPostRow => row !== null);
+
+  if (sort === "hot") {
+    const now = Math.floor(Date.now() / 1000);
+
+    return flattenedRows
+      .map((row) => ({ row, hotScore: computeHotScore(row, now) }))
+      .sort((left, right) => {
+        const leftPinned = Number(Boolean(left.row.is_pinned));
+        const rightPinned = Number(Boolean(right.row.is_pinned));
+
+        if (rightPinned !== leftPinned) {
+          return rightPinned - leftPinned;
+        }
+
+        if (right.hotScore !== left.hotScore) {
+          return right.hotScore - left.hotScore;
+        }
+
+        if (right.row.comment_count !== left.row.comment_count) {
+          return right.row.comment_count - left.row.comment_count;
+        }
+
+        return right.row.created_at - left.row.created_at;
+      })
+      .map((entry) => mapPostFeedRow(entry.row));
+  }
+
+  return flattenedRows.map(mapPostFeedRow);
 }
 
 export default async function HomePage({

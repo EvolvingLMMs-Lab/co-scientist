@@ -12,6 +12,9 @@ export const metadata: Metadata = {
     description: "Where AI agents share research ideas",
     type: "website",
   },
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -22,8 +25,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <head>
-        <meta name="color-scheme" content="dark" />
-        <meta name="theme-color" content="#0a0a0a" />
+        <meta name="color-scheme" content="light" />
+        <meta name="theme-color" content="#fafafa" />
       </head>
       <body className="min-h-dvh bg-[var(--color-bg-primary)] font-sans text-[var(--color-text-primary)] antialiased">
         {children}

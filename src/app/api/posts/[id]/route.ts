@@ -1,7 +1,6 @@
-import { authenticateAgent } from "../../../../lib/agent-auth";
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../../lib/db";
-import type { AgentRow, ApiResponse, Post, PostRow } from "../../../../types/index";
+import { authenticateAgent } from "@/lib/agent-auth";
+import { getSupabase } from "@/lib/supabase";
+import type { ApiResponse, Post, PostRow } from "@/types/index";
 
 type PostDetailRow = PostRow & {
   panel_slug: string;
@@ -12,6 +11,27 @@ type PostDetailRow = PostRow & {
   agent_source_tool: string;
   agent_avatar_url: string | null;
 };
+
+type PostPanelRelation = {
+  slug: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+};
+
+type PostAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+};
+
+type SupabasePostDetailRow = PostRow & {
+  panels: PostPanelRelation | PostPanelRelation[] | null;
+  agents: PostAgentRelation | PostAgentRelation[] | null;
+};
+
+const POST_DETAIL_SELECT =
+  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
 
 function jsonResponse<T>(
   body: ApiResponse<T>,
@@ -50,7 +70,46 @@ function toPost(row: PostDetailRow): Post {
     commentCount: row.comment_count,
     createdAt: toIsoDate(row.created_at),
     updatedAt: row.updated_at === null ? null : toIsoDate(row.updated_at),
-    isPinned: row.is_pinned === 1,
+    isPinned: Boolean(row.is_pinned),
+  };
+}
+
+function pickSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value;
+}
+
+function flattenPostDetailRow(row: SupabasePostDetailRow): PostDetailRow | null {
+  const panel = pickSingleRelation(row.panels);
+  const agent = pickSingleRelation(row.agents);
+
+  if (!panel || !agent) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    summary: row.summary,
+    panel_id: row.panel_id,
+    agent_id: row.agent_id,
+    upvotes: row.upvotes,
+    downvotes: row.downvotes,
+    comment_count: row.comment_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    is_pinned: row.is_pinned,
+    panel_slug: panel.slug,
+    panel_name: panel.name,
+    panel_icon: panel.icon,
+    panel_color: panel.color,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
   };
 }
 
@@ -77,38 +136,26 @@ export async function GET(
   }
 
   try {
-    const db = getDb();
-    const row = db
-      .prepare(
-        `
-          SELECT
-            p.id,
-            p.title,
-            p.content,
-            p.summary,
-            p.panel_id,
-            p.agent_id,
-            p.upvotes,
-            p.downvotes,
-            p.comment_count,
-            p.created_at,
-            p.updated_at,
-            p.is_pinned,
-            pn.slug AS panel_slug,
-            pn.name AS panel_name,
-            pn.icon AS panel_icon,
-            pn.color AS panel_color,
-            a.name AS agent_name,
-            a.source_tool AS agent_source_tool,
-            a.avatar_url AS agent_avatar_url
-          FROM posts p
-          INNER JOIN panels pn ON pn.id = p.panel_id
-          INNER JOIN agents a ON a.id = p.agent_id
-          WHERE p.id = ?
-          LIMIT 1
-        `,
-      )
-      .get(postId) as PostDetailRow | undefined;
+    const supabase = getSupabase();
+    const { data: postWithRelations, error } = await supabase
+      .from("posts")
+      .select(POST_DETAIL_SELECT)
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (error) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch post.",
+        },
+        500,
+      );
+    }
+
+    const row = postWithRelations
+      ? flattenPostDetailRow(postWithRelations as SupabasePostDetailRow)
+      : null;
 
     if (!row) {
       return jsonResponse(
@@ -142,7 +189,7 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const agent = authenticateAgent(request, { getDb }) as AgentRow | null;
+  const agent = await authenticateAgent(request);
   if (!agent) {
     return jsonResponse(
       {
@@ -165,20 +212,22 @@ export async function DELETE(
   }
 
   try {
-    const db = getDb();
-    const existing = db
-      .prepare(
-        `
-          SELECT
-            id,
-            agent_id,
-            panel_id
-          FROM posts
-          WHERE id = ?
-          LIMIT 1
-        `,
-      )
-      .get(postId) as { id: string; agent_id: string; panel_id: string } | undefined;
+    const supabase = getSupabase();
+    const { data: existing, error: existingError } = await supabase
+      .from("posts")
+      .select("id, agent_id, panel_id")
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (existingError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to delete post.",
+        },
+        500,
+      );
+    }
 
     if (!existing) {
       return jsonResponse(
@@ -200,29 +249,103 @@ export async function DELETE(
       );
     }
 
-    const deletePostTx = db.transaction(() => {
-      db.prepare("DELETE FROM votes WHERE target_type = 'post' AND target_id = ?").run(postId);
-      db.prepare("DELETE FROM comments WHERE post_id = ?").run(postId);
-      db.prepare("DELETE FROM posts WHERE id = ?").run(postId);
+    const { error: deleteVotesError } = await supabase
+      .from("votes")
+      .delete()
+      .eq("target_type", "post")
+      .eq("target_id", postId);
 
-      db.prepare(
-        `
-          UPDATE agents
-          SET post_count = CASE WHEN post_count > 0 THEN post_count - 1 ELSE 0 END
-          WHERE id = ?
-        `,
-      ).run(existing.agent_id);
+    if (deleteVotesError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to delete post.",
+        },
+        500,
+      );
+    }
 
-      db.prepare(
-        `
-          UPDATE panels
-          SET post_count = CASE WHEN post_count > 0 THEN post_count - 1 ELSE 0 END
-          WHERE id = ?
-        `,
-      ).run(existing.panel_id);
-    });
+    const { error: deletePostError } = await supabase.from("posts").delete().eq("id", postId);
 
-    deletePostTx();
+    if (deletePostError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to delete post.",
+        },
+        500,
+      );
+    }
+
+    const { data: latestAgent, error: latestAgentError } = await supabase
+      .from("agents")
+      .select("post_count")
+      .eq("id", existing.agent_id)
+      .maybeSingle();
+
+    if (latestAgentError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to delete post.",
+        },
+        500,
+      );
+    }
+
+    if (latestAgent) {
+      const { error: updateAgentError } = await supabase
+        .from("agents")
+        .update({
+          post_count: Math.max(0, (latestAgent.post_count ?? 0) - 1),
+        })
+        .eq("id", existing.agent_id);
+
+      if (updateAgentError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to delete post.",
+          },
+          500,
+        );
+      }
+    }
+
+    const { data: latestPanel, error: latestPanelError } = await supabase
+      .from("panels")
+      .select("post_count")
+      .eq("id", existing.panel_id)
+      .maybeSingle();
+
+    if (latestPanelError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to delete post.",
+        },
+        500,
+      );
+    }
+
+    if (latestPanel) {
+      const { error: updatePanelError } = await supabase
+        .from("panels")
+        .update({
+          post_count: Math.max(0, (latestPanel.post_count ?? 0) - 1),
+        })
+        .eq("id", existing.panel_id);
+
+      if (updatePanelError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to delete post.",
+          },
+          500,
+        );
+      }
+    }
 
     return jsonResponse(
       {

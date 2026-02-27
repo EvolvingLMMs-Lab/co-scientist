@@ -12,7 +12,7 @@
     "db:reset": "rm -f data/forum.db && npx tsx scripts/seed.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
+    "@supabase/supabase-js": "^2.98.0",
     "geist": "^1.7.0",
     "katex": "^0.16.11",
     "nanoid": "^5.0.9",
@@ -28,7 +28,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -1,17 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
 import { nanoid } from "nanoid";
-// @ts-ignore - LSP cannot resolve local lib path in this workspace
-import { consumeVerificationToken } from "../../../../lib/challenges";
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../../lib/db";
-import * as schemas from "../../../../lib/validation";
+import { consumeVerificationToken } from "@/lib/challenges";
+import { getSupabase } from "@/lib/supabase";
+import * as schemas from "@/lib/validation";
 import type {
   Agent,
   AgentRegistrationResponse,
   AgentRow,
   ApiResponse,
   RegisterAgentRequest,
-} from "../../../../types/index";
+} from "@/types/index";
 
 type SchemaParseError = {
   errors?: Array<{ message?: string }>;
@@ -56,7 +54,7 @@ function toAgent(row: AgentRow): Agent {
     sourceTool: row.source_tool,
     description: row.description,
     avatarUrl: row.avatar_url,
-    isVerified: row.is_verified === 1,
+    isVerified: Boolean(row.is_verified),
     createdAt: toIsoDate(row.created_at),
     postCount: row.post_count,
   };
@@ -195,11 +193,24 @@ export async function POST(request: Request): Promise<Response> {
   const avatarUrl = validation.data.avatarUrl?.trim() ?? null;
 
   try {
-    const db = getDb();
+    const supabase = getSupabase();
 
-    const existingByName = db
-      .prepare("SELECT id FROM agents WHERE name = ? LIMIT 1")
-      .get(name) as { id: string } | undefined;
+    const { data: existingByName, error: existingByNameError } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("name", name)
+      .maybeSingle();
+
+    if (existingByNameError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to register agent.",
+        },
+        500,
+      );
+    }
+
     if (existingByName) {
       return jsonResponse(
         {
@@ -210,43 +221,34 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    db.prepare(
-      `
-        INSERT INTO agents (
-          id,
-          name,
-          api_key_hash,
-          source_tool,
-          description,
-          avatar_url,
-          is_verified,
-          created_at,
-          post_count,
-          last_post_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-    ).run(agentId, name, apiKeyHash, sourceTool, description, avatarUrl, 0, now, 0, null);
-
-    const row = db
-      .prepare(
-        `
-          SELECT
-            id,
-            name,
-            api_key_hash,
-            source_tool,
-            description,
-            avatar_url,
-            is_verified,
-            created_at,
-            post_count,
-            last_post_at
-          FROM agents
-          WHERE id = ?
-        `,
+    const { data: row, error: insertError } = await supabase
+      .from("agents")
+      .insert({
+        id: agentId,
+        name,
+        api_key_hash: apiKeyHash,
+        source_tool: sourceTool,
+        description,
+        avatar_url: avatarUrl,
+        is_verified: false,
+        created_at: now,
+        post_count: 0,
+        last_post_at: null,
+      })
+      .select(
+        "id, name, api_key_hash, source_tool, description, avatar_url, is_verified, created_at, post_count, last_post_at",
       )
-      .get(agentId) as AgentRow | undefined;
+      .single();
+
+    if (insertError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to register agent.",
+        },
+        500,
+      );
+    }
 
     if (!row) {
       return jsonResponse(

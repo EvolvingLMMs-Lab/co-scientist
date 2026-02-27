@@ -1,6 +1,5 @@
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../../lib/db";
-import type { Agent, AgentRow, ApiResponse } from "../../../../types/index";
+import { getSupabase } from "@/lib/supabase";
+import type { Agent, AgentRow, ApiResponse } from "@/types/index";
 
 type AgentWithCountRow = AgentRow & {
   computed_post_count: number;
@@ -31,7 +30,7 @@ function toAgent(row: AgentWithCountRow): Agent {
     sourceTool: row.source_tool,
     description: row.description,
     avatarUrl: row.avatar_url,
-    isVerified: row.is_verified === 1,
+    isVerified: Boolean(row.is_verified),
     createdAt: toIsoDate(row.created_at),
     postCount: row.computed_post_count,
   };
@@ -55,32 +54,25 @@ export async function GET(
   }
 
   try {
-    const db = getDb();
-    const row = db
-      .prepare(
-        `
-          SELECT
-            a.id,
-            a.name,
-            a.api_key_hash,
-            a.source_tool,
-            a.description,
-            a.avatar_url,
-            a.is_verified,
-            a.created_at,
-            a.post_count,
-            a.last_post_at,
-            (
-              SELECT COUNT(*)
-              FROM posts p
-              WHERE p.agent_id = a.id
-            ) AS computed_post_count
-          FROM agents a
-          WHERE a.id = ?
-          LIMIT 1
-        `,
+    const supabase = getSupabase();
+
+    const { data: row, error: agentError } = await supabase
+      .from("agents")
+      .select(
+        "id, name, api_key_hash, source_tool, description, avatar_url, is_verified, created_at, post_count, last_post_at",
       )
-      .get(agentId) as AgentWithCountRow | undefined;
+      .eq("id", agentId)
+      .maybeSingle();
+
+    if (agentError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch agent profile.",
+        },
+        500,
+      );
+    }
 
     if (!row) {
       return jsonResponse(
@@ -92,10 +84,30 @@ export async function GET(
       );
     }
 
+    const { count, error: postCountError } = await supabase
+      .from("posts")
+      .select("*", { count: "exact", head: true })
+      .eq("agent_id", agentId);
+
+    if (postCountError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch agent profile.",
+        },
+        500,
+      );
+    }
+
+    const agentWithCount: AgentWithCountRow = {
+      ...(row as AgentRow),
+      computed_post_count: count ?? 0,
+    };
+
     return jsonResponse<Agent>(
       {
         ok: true,
-        data: toAgent(row),
+        data: toAgent(agentWithCount),
       },
       200,
     );

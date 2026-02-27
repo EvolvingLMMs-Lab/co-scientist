@@ -1,9 +1,8 @@
-import { authenticateAgent } from "../../../../../lib/agent-auth";
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../../../lib/db";
-import { checkRateLimit } from "../../../../../lib/rate-limit";
-import * as schemas from "../../../../../lib/validation";
-import type { AgentRow, ApiResponse, VoteRequest } from "../../../../../types/index";
+import { authenticateAgent } from "@/lib/agent-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getSupabase } from "@/lib/supabase";
+import * as schemas from "@/lib/validation";
+import type { ApiResponse, VoteRequest } from "@/types/index";
 
 type RateLimitState = {
   allowed: boolean;
@@ -112,7 +111,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const agent = authenticateAgent(request, { getDb }) as AgentRow | null;
+  const agent = await authenticateAgent(request);
   if (!agent) {
     return jsonResponse(
       {
@@ -177,11 +176,25 @@ export async function POST(
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    const db = getDb();
+    const supabase = getSupabase();
 
-    const postExists = db
-      .prepare("SELECT id FROM posts WHERE id = ? LIMIT 1")
-      .get(postId) as { id: string } | undefined;
+    const { data: postExists, error: postExistsError } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (postExistsError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to cast vote.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
     if (!postExists) {
       return jsonResponse(
         {
@@ -193,77 +206,120 @@ export async function POST(
       );
     }
 
-    const voteResult = db.transaction((value: 1 | -1): VoteCounters & { value: 1 | -1 } => {
-      const existingVote = db
-        .prepare(
-          `
-            SELECT value
-            FROM votes
-            WHERE agent_id = ? AND target_id = ? AND target_type = 'post'
-            LIMIT 1
-          `,
-        )
-        .get(agent.id, postId) as { value: number } | undefined;
+    const { data: existingVote, error: existingVoteError } = await supabase
+      .from("votes")
+      .select("value")
+      .eq("agent_id", agent.id)
+      .eq("target_id", postId)
+      .maybeSingle();
 
-      if (existingVote) {
-        db.prepare(
-          `
-            UPDATE votes
-            SET value = ?, created_at = ?
-            WHERE agent_id = ? AND target_id = ? AND target_type = 'post'
-          `,
-        ).run(value, now, agent.id, postId);
-      } else {
-        db.prepare(
-          `
-            INSERT INTO votes (
-              agent_id,
-              target_id,
-              target_type,
-              value,
-              created_at
-            )
-            VALUES (?, ?, 'post', ?, ?)
-          `,
-        ).run(agent.id, postId, value, now);
+    if (existingVoteError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to cast vote.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    if (existingVote) {
+      const { error: updateVoteError } = await supabase
+        .from("votes")
+        .update({
+          value: validation.data.value,
+          created_at: now,
+        })
+        .eq("agent_id", agent.id)
+        .eq("target_id", postId);
+
+      if (updateVoteError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to cast vote.",
+          },
+          500,
+          rateLimitHeaders,
+        );
       }
+    } else {
+      const { error: insertVoteError } = await supabase.from("votes").insert({
+        agent_id: agent.id,
+        target_id: postId,
+        target_type: "post",
+        value: validation.data.value,
+        created_at: now,
+      });
 
-      const counters = db
-        .prepare(
-          `
-            SELECT
-              COALESCE(SUM(CASE WHEN value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-              COALESCE(SUM(CASE WHEN value = -1 THEN 1 ELSE 0 END), 0) AS downvotes
-            FROM votes
-            WHERE target_type = 'post' AND target_id = ?
-          `,
-        )
-        .get(postId) as VoteCounters;
+      if (insertVoteError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to cast vote.",
+          },
+          500,
+          rateLimitHeaders,
+        );
+      }
+    }
 
-      db.prepare(
-        `
-          UPDATE posts
-          SET upvotes = ?, downvotes = ?, updated_at = ?
-          WHERE id = ?
-        `,
-      ).run(counters.upvotes, counters.downvotes, now, postId);
+    const { data: votes, error: votesError } = await supabase
+      .from("votes")
+      .select("value")
+      .eq("target_type", "post")
+      .eq("target_id", postId);
 
-      return {
-        value,
+    if (votesError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to cast vote.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const counters: VoteCounters = { upvotes: 0, downvotes: 0 };
+    for (const vote of votes ?? []) {
+      if (vote.value === 1) {
+        counters.upvotes += 1;
+      } else if (vote.value === -1) {
+        counters.downvotes += 1;
+      }
+    }
+
+    const { error: updatePostError } = await supabase
+      .from("posts")
+      .update({
         upvotes: counters.upvotes,
         downvotes: counters.downvotes,
-      };
-    })(validation.data.value);
+        updated_at: now,
+      })
+      .eq("id", postId);
+
+    if (updatePostError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to cast vote.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
 
     return jsonResponse<VoteResponsePayload>(
       {
         ok: true,
         data: {
           postId,
-          value: voteResult.value,
-          upvotes: voteResult.upvotes,
-          downvotes: voteResult.downvotes,
-          score: voteResult.upvotes - voteResult.downvotes,
+          value: validation.data.value,
+          upvotes: counters.upvotes,
+          downvotes: counters.downvotes,
+          score: counters.upvotes - counters.downvotes,
         },
       },
       200,

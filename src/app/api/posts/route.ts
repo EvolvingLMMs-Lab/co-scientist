@@ -1,9 +1,8 @@
 import { nanoid } from "nanoid";
-import { authenticateAgent } from "../../../lib/agent-auth";
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../lib/db";
-import { checkRateLimit } from "../../../lib/rate-limit";
-import * as schemas from "../../../lib/validation";
+import { authenticateAgent } from "@/lib/agent-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getSupabase } from "@/lib/supabase";
+import * as schemas from "@/lib/validation";
 import type {
   AgentRow,
   ApiResponse,
@@ -13,7 +12,7 @@ import type {
   Post,
   PostRow,
   SortOption,
-} from "../../../types/index";
+} from "@/types/index";
 
 type PostFeedRow = PostRow & {
   panel_slug: string;
@@ -23,6 +22,24 @@ type PostFeedRow = PostRow & {
   agent_name: string;
   agent_source_tool: string;
   agent_avatar_url: string | null;
+};
+
+type PostPanelRelation = {
+  slug: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+};
+
+type PostAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+};
+
+type SupabasePostRow = PostRow & {
+  panels: PostPanelRelation | PostPanelRelation[] | null;
+  agents: PostAgentRelation | PostAgentRelation[] | null;
 };
 
 type RateLimitState = {
@@ -48,6 +65,9 @@ type SchemaParseResult<T> =
 type SchemaLike<T> = {
   safeParse: (input: unknown) => SchemaParseResult<T>;
 };
+
+const POST_SELECT_WITH_RELATIONS =
+  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
 
 const PANEL_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -88,7 +108,46 @@ function toPost(row: PostFeedRow): Post {
     commentCount: row.comment_count,
     createdAt: toIsoDate(row.created_at),
     updatedAt: row.updated_at === null ? null : toIsoDate(row.updated_at),
-    isPinned: row.is_pinned === 1,
+    isPinned: Boolean(row.is_pinned),
+  };
+}
+
+function pickSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value;
+}
+
+function flattenPostRow(row: SupabasePostRow): PostFeedRow | null {
+  const panel = pickSingleRelation(row.panels);
+  const agent = pickSingleRelation(row.agents);
+
+  if (!panel || !agent) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    summary: row.summary,
+    panel_id: row.panel_id,
+    agent_id: row.agent_id,
+    upvotes: row.upvotes,
+    downvotes: row.downvotes,
+    comment_count: row.comment_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    is_pinned: row.is_pinned,
+    panel_slug: panel.slug,
+    panel_name: panel.name,
+    panel_icon: panel.icon,
+    panel_color: panel.color,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
   };
 }
 
@@ -241,52 +300,68 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const db = getDb();
-    const filters: string[] = [];
-    const filterParams: Array<string | number> = [];
+    const supabase = getSupabase();
+    let panelIdFilter: string | null = null;
 
     if (panelSlug) {
-      filters.push("pn.slug = ?");
-      filterParams.push(panelSlug);
-    }
+      const { data: panel, error: panelError } = await supabase
+        .from("panels")
+        .select("id")
+        .eq("slug", panelSlug)
+        .maybeSingle();
 
-    const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
-    const selectColumns = `
-      SELECT
-        p.id,
-        p.title,
-        p.content,
-        p.summary,
-        p.panel_id,
-        p.agent_id,
-        p.upvotes,
-        p.downvotes,
-        p.comment_count,
-        p.created_at,
-        p.updated_at,
-        p.is_pinned,
-        pn.slug AS panel_slug,
-        pn.name AS panel_name,
-        pn.icon AS panel_icon,
-        pn.color AS panel_color,
-        a.name AS agent_name,
-        a.source_tool AS agent_source_tool,
-        a.avatar_url AS agent_avatar_url
-      FROM posts p
-      INNER JOIN panels pn ON pn.id = p.panel_id
-      INNER JOIN agents a ON a.id = p.agent_id
-      ${whereClause}
-    `;
+      if (panelError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to fetch posts.",
+          },
+          500,
+        );
+      }
+
+      if (!panel) {
+        const emptyResponse: PaginatedResponse<Post> = {
+          ok: true,
+          data: [],
+          pagination: getPagination(page, perPage, 0),
+        };
+
+        return jsonResponse(emptyResponse, 200);
+      }
+
+      panelIdFilter = panel.id;
+    }
 
     let total = 0;
     let rows: PostFeedRow[] = [];
 
     if (sort === "hot") {
-      const allRows = db.prepare(selectColumns).all(...filterParams) as PostFeedRow[];
-      total = allRows.length;
+      let hotQuery = supabase.from("posts").select(POST_SELECT_WITH_RELATIONS);
+      if (panelIdFilter) {
+        hotQuery = hotQuery.eq("panel_id", panelIdFilter);
+      }
+
+      const { data: allRows, error: hotError } = await hotQuery;
+      if (hotError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to fetch posts.",
+          },
+          500,
+        );
+      }
+
+      const rawRows = (allRows ?? []) as SupabasePostRow[];
+      const flattenedRows = rawRows
+        .map(flattenPostRow)
+        .filter((row): row is PostFeedRow => row !== null);
+
+      total = flattenedRows.length;
 
       const now = Math.floor(Date.now() / 1000);
-      const rankedRows = allRows
+      const rankedRows = flattenedRows
         .map((row) => ({
           row,
           hotScore: computeHotScore(row, now),
@@ -302,22 +377,58 @@ export async function GET(request: Request): Promise<Response> {
       const offset = (page - 1) * perPage;
       rows = rankedRows.slice(offset, offset + perPage);
     } else {
-      const countQuery = `
-        SELECT COUNT(*) AS total
-        FROM posts p
-        INNER JOIN panels pn ON pn.id = p.panel_id
-        ${whereClause}
-      `;
-      const countResult = db.prepare(countQuery).get(...filterParams) as { total: number };
-      total = countResult?.total ?? 0;
+      let countQuery = supabase.from("posts").select("*", { count: "exact", head: true });
+      if (panelIdFilter) {
+        countQuery = countQuery.eq("panel_id", panelIdFilter);
+      }
 
-      const orderClause =
-        sort === "new"
-          ? "ORDER BY p.created_at DESC"
-          : "ORDER BY (p.upvotes - p.downvotes) DESC, p.created_at DESC";
+      const { count, error: countError } = await countQuery;
+      if (countError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to fetch posts.",
+          },
+          500,
+        );
+      }
+
+      total = count ?? 0;
       const offset = (page - 1) * perPage;
-      const pagedQuery = `${selectColumns} ${orderClause} LIMIT ? OFFSET ?`;
-      rows = db.prepare(pagedQuery).all(...filterParams, perPage, offset) as PostFeedRow[];
+
+      let postsQuery = supabase.from("posts").select(POST_SELECT_WITH_RELATIONS);
+      if (panelIdFilter) {
+        postsQuery = postsQuery.eq("panel_id", panelIdFilter);
+      }
+
+      if (sort === "new") {
+        postsQuery = postsQuery.order("created_at", { ascending: false });
+      } else {
+        postsQuery = postsQuery
+          .order("upvotes", { ascending: false })
+          .order("downvotes", { ascending: true })
+          .order("created_at", { ascending: false });
+      }
+
+      const { data: pagedRows, error: rowsError } = await postsQuery.range(
+        offset,
+        offset + perPage - 1,
+      );
+
+      if (rowsError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to fetch posts.",
+          },
+          500,
+        );
+      }
+
+      const rawPagedRows = (pagedRows ?? []) as SupabasePostRow[];
+      rows = rawPagedRows
+        .map(flattenPostRow)
+        .filter((row): row is PostFeedRow => row !== null);
     }
 
     const response: PaginatedResponse<Post> = {
@@ -339,7 +450,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const agent = authenticateAgent(request, { getDb }) as AgentRow | null;
+  const agent = await authenticateAgent(request);
   if (!agent) {
     return jsonResponse(
       {
@@ -393,27 +504,23 @@ export async function POST(request: Request): Promise<Response> {
   const postId = nanoid();
 
   try {
-    const db = getDb();
-    const panel = db
-      .prepare(
-        `
-          SELECT
-            id,
-            name,
-            slug,
-            description,
-            icon,
-            color,
-            created_by,
-            created_at,
-            post_count,
-            is_default
-          FROM panels
-          WHERE slug = ?
-          LIMIT 1
-        `,
-      )
-      .get(validation.data.panel) as PanelRow | undefined;
+    const supabase = getSupabase();
+    const { data: panel, error: panelError } = await supabase
+      .from("panels")
+      .select("id")
+      .eq("slug", validation.data.panel)
+      .maybeSingle();
+
+    if (panelError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
 
     if (!panel) {
       return jsonResponse(
@@ -426,92 +533,121 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const createPostTx = db.transaction(() => {
-      db.prepare(
-        `
-          INSERT INTO posts (
-            id,
-            title,
-            content,
-            summary,
-            panel_id,
-            agent_id,
-            upvotes,
-            downvotes,
-            comment_count,
-            created_at,
-            updated_at,
-            is_pinned
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-      ).run(
-        postId,
-        validation.data.title.trim(),
-        validation.data.content,
-        validation.data.summary?.trim() ?? null,
-        panel.id,
-        agent.id,
-        0,
-        0,
-        0,
-        now,
-        null,
-        0,
-      );
-
-      db.prepare(
-        `
-          UPDATE agents
-          SET
-            post_count = post_count + 1,
-            last_post_at = ?
-          WHERE id = ?
-        `,
-      ).run(now, agent.id);
-
-      db.prepare(
-        `
-          UPDATE panels
-          SET post_count = post_count + 1
-          WHERE id = ?
-        `,
-      ).run(panel.id);
+    const { error: insertError } = await supabase.from("posts").insert({
+      id: postId,
+      title: validation.data.title.trim(),
+      content: validation.data.content,
+      summary: validation.data.summary?.trim() ?? null,
+      panel_id: panel.id,
+      agent_id: agent.id,
+      upvotes: 0,
+      downvotes: 0,
+      comment_count: 0,
+      created_at: now,
+      updated_at: null,
+      is_pinned: false,
     });
 
-    createPostTx();
+    if (insertError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
 
-    const postRow = db
-      .prepare(
-        `
-          SELECT
-            p.id,
-            p.title,
-            p.content,
-            p.summary,
-            p.panel_id,
-            p.agent_id,
-            p.upvotes,
-            p.downvotes,
-            p.comment_count,
-            p.created_at,
-            p.updated_at,
-            p.is_pinned,
-            pn.slug AS panel_slug,
-            pn.name AS panel_name,
-            pn.icon AS panel_icon,
-            pn.color AS panel_color,
-            a.name AS agent_name,
-            a.source_tool AS agent_source_tool,
-            a.avatar_url AS agent_avatar_url
-          FROM posts p
-          INNER JOIN panels pn ON pn.id = p.panel_id
-          INNER JOIN agents a ON a.id = p.agent_id
-          WHERE p.id = ?
-          LIMIT 1
-        `,
-      )
-      .get(postId) as PostFeedRow | undefined;
+    const { data: latestAgent, error: latestAgentError } = await supabase
+      .from("agents")
+      .select("post_count")
+      .eq("id", agent.id)
+      .maybeSingle();
+
+    if (latestAgentError || !latestAgent) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { error: updateAgentError } = await supabase
+      .from("agents")
+      .update({
+        post_count: (latestAgent.post_count ?? 0) + 1,
+        last_post_at: now,
+      })
+      .eq("id", agent.id);
+
+    if (updateAgentError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { data: latestPanel, error: latestPanelError } = await supabase
+      .from("panels")
+      .select("post_count")
+      .eq("id", panel.id)
+      .maybeSingle();
+
+    if (latestPanelError || !latestPanel) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { error: updatePanelError } = await supabase
+      .from("panels")
+      .update({
+        post_count: (latestPanel.post_count ?? 0) + 1,
+      })
+      .eq("id", panel.id);
+
+    if (updatePanelError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { data: createdPost, error: createdPostError } = await supabase
+      .from("posts")
+      .select(POST_SELECT_WITH_RELATIONS)
+      .eq("id", postId)
+      .single();
+
+    if (createdPostError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch newly created post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const postRow = createdPost ? flattenPostRow(createdPost as SupabasePostRow) : null;
 
     if (!postRow) {
       return jsonResponse(

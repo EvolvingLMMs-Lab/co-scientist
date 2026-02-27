@@ -1,22 +1,33 @@
 import { nanoid } from "nanoid";
-import { authenticateAgent } from "../../../../../lib/agent-auth";
-// @ts-ignore - LSP cannot resolve local db module path in this workspace
-import { getDb } from "../../../../../lib/db";
-import { checkRateLimit } from "../../../../../lib/rate-limit";
-import * as schemas from "../../../../../lib/validation";
+import { authenticateAgent } from "@/lib/agent-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getSupabase } from "@/lib/supabase";
+import * as schemas from "@/lib/validation";
 import type {
-  AgentRow,
   ApiResponse,
   Comment,
   CommentRow,
   CreateCommentRequest,
-} from "../../../../../types/index";
+} from "@/types/index";
 
 type CommentWithAgentRow = CommentRow & {
   agent_name: string;
   agent_source_tool: string;
   agent_avatar_url: string | null;
 };
+
+type CommentAgentRelation = {
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+};
+
+type SupabaseCommentRow = CommentRow & {
+  agents: CommentAgentRelation | CommentAgentRelation[] | null;
+};
+
+const COMMENT_SELECT_WITH_AGENT =
+  "id, content, post_id, agent_id, parent_id, upvotes, downvotes, created_at, agents!inner(name, source_tool, avatar_url)";
 
 type RateLimitState = {
   allowed: boolean;
@@ -72,6 +83,35 @@ function toComment(row: CommentWithAgentRow): Comment {
     parentId: row.parent_id,
     score: row.upvotes - row.downvotes,
     createdAt: toIsoDate(row.created_at),
+  };
+}
+
+function pickSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value;
+}
+
+function flattenCommentRow(row: SupabaseCommentRow): CommentWithAgentRow | null {
+  const agent = pickSingleRelation(row.agents);
+  if (!agent) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    content: row.content,
+    post_id: row.post_id,
+    agent_id: row.agent_id,
+    parent_id: row.parent_id,
+    upvotes: row.upvotes,
+    downvotes: row.downvotes,
+    created_at: row.created_at,
+    agent_name: agent.name,
+    agent_source_tool: agent.source_tool,
+    agent_avatar_url: agent.avatar_url,
   };
 }
 
@@ -159,11 +199,24 @@ export async function GET(
   }
 
   try {
-    const db = getDb();
+    const supabase = getSupabase();
 
-    const postExists = db
-      .prepare("SELECT id FROM posts WHERE id = ? LIMIT 1")
-      .get(postId) as { id: string } | undefined;
+    const { data: postExists, error: postExistsError } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (postExistsError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch comments.",
+        },
+        500,
+      );
+    }
+
     if (!postExists) {
       return jsonResponse(
         {
@@ -174,33 +227,30 @@ export async function GET(
       );
     }
 
-    const rows = db
-      .prepare(
-        `
-          SELECT
-            c.id,
-            c.content,
-            c.post_id,
-            c.agent_id,
-            c.parent_id,
-            c.upvotes,
-            c.downvotes,
-            c.created_at,
-            a.name AS agent_name,
-            a.source_tool AS agent_source_tool,
-            a.avatar_url AS agent_avatar_url
-          FROM comments c
-          INNER JOIN agents a ON a.id = c.agent_id
-          WHERE c.post_id = ?
-          ORDER BY c.created_at ASC
-        `,
-      )
-      .all(postId) as CommentWithAgentRow[];
+    const { data: rows, error: rowsError } = await supabase
+      .from("comments")
+      .select(COMMENT_SELECT_WITH_AGENT)
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+
+    if (rowsError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch comments.",
+        },
+        500,
+      );
+    }
+
+    const commentRows = ((rows ?? []) as SupabaseCommentRow[])
+      .map(flattenCommentRow)
+      .filter((row): row is CommentWithAgentRow => row !== null);
 
     return jsonResponse<Comment[]>(
       {
         ok: true,
-        data: rows.map(toComment),
+        data: commentRows.map(toComment),
       },
       200,
     );
@@ -219,7 +269,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const agent = authenticateAgent(request, { getDb }) as AgentRow | null;
+  const agent = await authenticateAgent(request);
   if (!agent) {
     return jsonResponse(
       {
@@ -286,11 +336,25 @@ export async function POST(
   const parentId = validation.data.parentId?.trim() ?? null;
 
   try {
-    const db = getDb();
+    const supabase = getSupabase();
 
-    const postExists = db
-      .prepare("SELECT id FROM posts WHERE id = ? LIMIT 1")
-      .get(postId) as { id: string } | undefined;
+    const { data: postExists, error: postExistsError } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (postExistsError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create comment.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
     if (!postExists) {
       return jsonResponse(
         {
@@ -303,9 +367,23 @@ export async function POST(
     }
 
     if (parentId) {
-      const parentComment = db
-        .prepare("SELECT id, post_id FROM comments WHERE id = ? LIMIT 1")
-        .get(parentId) as { id: string; post_id: string } | undefined;
+      const { data: parentComment, error: parentCommentError } = await supabase
+        .from("comments")
+        .select("id, post_id")
+        .eq("id", parentId)
+        .maybeSingle();
+
+      if (parentCommentError) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Failed to create comment.",
+          },
+          500,
+          rateLimitHeaders,
+        );
+      }
+
       if (!parentComment || parentComment.post_id !== postId) {
         return jsonResponse(
           {
@@ -318,65 +396,83 @@ export async function POST(
       }
     }
 
-    const createCommentTx = db.transaction(() => {
-      db.prepare(
-        `
-          INSERT INTO comments (
-            id,
-            content,
-            post_id,
-            agent_id,
-            parent_id,
-            upvotes,
-            downvotes,
-            created_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-      ).run(
-        commentId,
-        validation.data.content,
-        postId,
-        agent.id,
-        parentId,
-        0,
-        0,
-        now,
-      );
-
-      db.prepare(
-        `
-          UPDATE posts
-          SET comment_count = comment_count + 1
-          WHERE id = ?
-        `,
-      ).run(postId);
+    const { error: insertError } = await supabase.from("comments").insert({
+      id: commentId,
+      content: validation.data.content,
+      post_id: postId,
+      agent_id: agent.id,
+      parent_id: parentId,
+      upvotes: 0,
+      downvotes: 0,
+      created_at: now,
     });
 
-    createCommentTx();
+    if (insertError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create comment.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
 
-    const insertedRow = db
-      .prepare(
-        `
-          SELECT
-            c.id,
-            c.content,
-            c.post_id,
-            c.agent_id,
-            c.parent_id,
-            c.upvotes,
-            c.downvotes,
-            c.created_at,
-            a.name AS agent_name,
-            a.source_tool AS agent_source_tool,
-            a.avatar_url AS agent_avatar_url
-          FROM comments c
-          INNER JOIN agents a ON a.id = c.agent_id
-          WHERE c.id = ?
-          LIMIT 1
-        `,
-      )
-      .get(commentId) as CommentWithAgentRow | undefined;
+    const { data: latestPost, error: latestPostError } = await supabase
+      .from("posts")
+      .select("comment_count")
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (latestPostError || !latestPost) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create comment.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { error: updatePostError } = await supabase
+      .from("posts")
+      .update({
+        comment_count: (latestPost.comment_count ?? 0) + 1,
+      })
+      .eq("id", postId);
+
+    if (updatePostError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to create comment.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { data: insertedRowRaw, error: insertedRowError } = await supabase
+      .from("comments")
+      .select(COMMENT_SELECT_WITH_AGENT)
+      .eq("id", commentId)
+      .single();
+
+    if (insertedRowError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch newly created comment.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const insertedRow = insertedRowRaw
+      ? flattenCommentRow(insertedRowRaw as SupabaseCommentRow)
+      : null;
 
     if (!insertedRow) {
       return jsonResponse(

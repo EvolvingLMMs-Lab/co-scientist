@@ -1,8 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 
-import BetterSqlite3 from "better-sqlite3";
 import { nanoid } from "nanoid";
 
 import type {
@@ -19,9 +16,7 @@ import type {
   RegisterAgentRequest,
   SortOption,
 } from "../types/index";
-import { initializeDatabase } from "./schema";
-
-type SQLiteDatabase = InstanceType<typeof BetterSqlite3>;
+import { getSupabase } from "./supabase";
 
 interface PostJoinedRow extends PostRow {
   panel_slug: string;
@@ -42,6 +37,41 @@ interface CommentJoinedRow extends CommentRow {
 interface VoteCounterRow {
   upvotes: number;
   downvotes: number;
+}
+
+interface PanelLookupRow {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+}
+
+interface AgentLookupRow {
+  id: string;
+  name: string;
+  source_tool: string;
+  avatar_url: string | null;
+}
+
+interface VoteLookupRow {
+  target_type: "post" | "comment";
+  value: number;
+}
+
+interface PanelCounterRow {
+  id: string;
+  post_count: number;
+}
+
+interface AgentCounterRow {
+  id: string;
+  post_count: number;
+}
+
+interface PostCounterRow {
+  id: string;
+  comment_count: number;
 }
 
 export interface CreatePanelInput {
@@ -86,61 +116,39 @@ export interface VoteResult {
   score: number;
 }
 
-const globalState = globalThis as unknown as { db?: SQLiteDatabase | null };
-
-function resolveDatabasePath(): string {
-  const configuredPath = process.env.DATABASE_PATH ?? path.join("data", "forum.db");
-  if (path.isAbsolute(configuredPath)) {
-    return configuredPath;
-  }
-
-  return path.resolve(process.cwd(), configuredPath);
-}
-
-export const DATABASE_PATH = resolveDatabasePath();
-
-const POST_SELECT = `
-  SELECT
-    p.id,
-    p.title,
-    p.content,
-    p.summary,
-    p.panel_id,
-    p.agent_id,
-    p.upvotes,
-    p.downvotes,
-    p.comment_count,
-    p.created_at,
-    p.updated_at,
-    p.is_pinned,
-    pnl.slug AS panel_slug,
-    pnl.name AS panel_name,
-    pnl.icon AS panel_icon,
-    pnl.color AS panel_color,
-    a.name AS agent_name,
-    a.source_tool AS agent_source_tool,
-    a.avatar_url AS agent_avatar_url
-  FROM posts p
-  INNER JOIN panels pnl ON pnl.id = p.panel_id
-  INNER JOIN agents a ON a.id = p.agent_id
-`;
-
-function ensureDataDirectory(): void {
-  const dataDir = path.dirname(DATABASE_PATH);
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
 function toError(prefix: string, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   return new Error(`${prefix}: ${message}`);
 }
 
-function epochToIso(epochSeconds: number | null): string | null {
+function toEpochSeconds(value: number | string): number {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  return Number.parseInt(value, 10);
+}
+
+function epochToIso(epochSeconds: number | string | null): string | null {
   if (epochSeconds === null) {
     return null;
   }
 
-  return new Date(epochSeconds * 1000).toISOString();
+  return new Date(toEpochSeconds(epochSeconds) * 1000).toISOString();
+}
+
+function firstOrNull<T>(rows: T[] | null): T | null {
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+
+  return rows[0];
+}
+
+function computeHotScore(row: PostRow, nowEpochSeconds: number): number {
+  const score = row.upvotes - row.downvotes;
+  const hoursSincePost = Math.max(0, (nowEpochSeconds - toEpochSeconds(row.created_at)) / 3600);
+  return score / Math.pow(hoursSincePost + 2, 1.5);
 }
 
 function toAgent(row: AgentRow): Agent {
@@ -150,8 +158,8 @@ function toAgent(row: AgentRow): Agent {
     sourceTool: row.source_tool,
     description: row.description,
     avatarUrl: row.avatar_url,
-    isVerified: row.is_verified === 1,
-    createdAt: new Date(row.created_at * 1000).toISOString(),
+    isVerified: Boolean(row.is_verified),
+    createdAt: new Date(toEpochSeconds(row.created_at) * 1000).toISOString(),
     postCount: row.post_count,
   };
 }
@@ -165,9 +173,9 @@ function toPanel(row: PanelRow): Panel {
     icon: row.icon,
     color: row.color,
     createdBy: row.created_by,
-    createdAt: new Date(row.created_at * 1000).toISOString(),
+    createdAt: new Date(toEpochSeconds(row.created_at) * 1000).toISOString(),
     postCount: row.post_count,
-    isDefault: row.is_default === 1,
+    isDefault: Boolean(row.is_default),
   };
 }
 
@@ -188,9 +196,9 @@ function toPost(row: PostJoinedRow): Post {
     agentAvatarUrl: row.agent_avatar_url,
     score: row.upvotes - row.downvotes,
     commentCount: row.comment_count,
-    createdAt: new Date(row.created_at * 1000).toISOString(),
+    createdAt: new Date(toEpochSeconds(row.created_at) * 1000).toISOString(),
     updatedAt: epochToIso(row.updated_at),
-    isPinned: row.is_pinned === 1,
+    isPinned: Boolean(row.is_pinned),
   };
 }
 
@@ -205,7 +213,7 @@ function toComment(row: CommentJoinedRow): Comment {
     agentAvatarUrl: row.agent_avatar_url,
     parentId: row.parent_id,
     score: row.upvotes - row.downvotes,
-    createdAt: new Date(row.created_at * 1000).toISOString(),
+    createdAt: new Date(toEpochSeconds(row.created_at) * 1000).toISOString(),
   };
 }
 
@@ -217,32 +225,133 @@ function normalizeSort(sort?: SortOption): SortOption {
   return "hot";
 }
 
-function sortClause(sort: SortOption): string {
-  switch (sort) {
-    case "new":
-      return "p.created_at DESC";
-    case "top":
-      return "(p.upvotes - p.downvotes) DESC, p.created_at DESC";
-    case "hot":
-    default:
-      return "(p.upvotes - p.downvotes) DESC, p.comment_count DESC, p.created_at DESC";
-  }
-}
-
 function voteTargetTable(targetType: "post" | "comment"): "posts" | "comments" {
   return targetType === "post" ? "posts" : "comments";
 }
 
-function getVoteCounters(
-  db: SQLiteDatabase,
+async function getPostJoinedRows(rows: PostRow[]): Promise<PostJoinedRow[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabase();
+  const panelIds = [...new Set(rows.map((row) => row.panel_id))];
+  const agentIds = [...new Set(rows.map((row) => row.agent_id))];
+
+  const [panelResult, agentResult] = await Promise.all([
+    supabase.from("panels").select("id, slug, name, icon, color").in("id", panelIds),
+    supabase.from("agents").select("id, name, source_tool, avatar_url").in("id", agentIds),
+  ]);
+
+  if (panelResult.error) {
+    throw panelResult.error;
+  }
+
+  if (agentResult.error) {
+    throw agentResult.error;
+  }
+
+  const panelMap = new Map(
+    ((panelResult.data as PanelLookupRow[] | null) ?? []).map((row) => [row.id, row]),
+  );
+  const agentMap = new Map(
+    ((agentResult.data as AgentLookupRow[] | null) ?? []).map((row) => [row.id, row]),
+  );
+
+  return rows.map((row) => {
+    const panel = panelMap.get(row.panel_id);
+    const agent = agentMap.get(row.agent_id);
+
+    if (!panel) {
+      throw new Error(`Panel not found for post: ${row.id}`);
+    }
+
+    if (!agent) {
+      throw new Error(`Agent not found for post: ${row.id}`);
+    }
+
+    return {
+      ...row,
+      panel_slug: panel.slug,
+      panel_name: panel.name,
+      panel_icon: panel.icon,
+      panel_color: panel.color,
+      agent_name: agent.name,
+      agent_source_tool: agent.source_tool,
+      agent_avatar_url: agent.avatar_url,
+    };
+  });
+}
+
+async function getPostRowById(id: string): Promise<PostJoinedRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from("posts").select("*").eq("id", id).limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  const row = firstOrNull((data as PostRow[] | null) ?? null);
+  if (!row) {
+    return null;
+  }
+
+  const joinedRows = await getPostJoinedRows([row]);
+  return firstOrNull(joinedRows) ?? null;
+}
+
+async function getCommentJoinedRows(rows: CommentRow[]): Promise<CommentJoinedRow[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabase();
+  const agentIds = [...new Set(rows.map((row) => row.agent_id))];
+  const { data, error } = await supabase
+    .from("agents")
+    .select("id, name, source_tool, avatar_url")
+    .in("id", agentIds);
+
+  if (error) {
+    throw error;
+  }
+
+  const agentMap = new Map(
+    ((data as AgentLookupRow[] | null) ?? []).map((row) => [row.id, row]),
+  );
+
+  return rows.map((row) => {
+    const agent = agentMap.get(row.agent_id);
+    if (!agent) {
+      throw new Error(`Agent not found for comment: ${row.id}`);
+    }
+
+    return {
+      ...row,
+      agent_name: agent.name,
+      agent_source_tool: agent.source_tool,
+      agent_avatar_url: agent.avatar_url,
+    };
+  });
+}
+
+async function getVoteCounters(
   targetType: "post" | "comment",
   targetId: string,
-): VoteCounterRow {
+): Promise<VoteCounterRow> {
   const tableName = voteTargetTable(targetType);
-  const row = db
-    .prepare(`SELECT upvotes, downvotes FROM ${tableName} WHERE id = ?`)
-    .get(targetId) as VoteCounterRow | undefined;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(tableName)
+    .select("upvotes, downvotes")
+    .eq("id", targetId)
+    .limit(1);
 
+  if (error) {
+    throw error;
+  }
+
+  const row = firstOrNull((data as VoteCounterRow[] | null) ?? null);
   if (!row) {
     throw new Error(`${targetType} not found: ${targetId}`);
   }
@@ -250,34 +359,32 @@ function getVoteCounters(
   return row;
 }
 
-function applyVoteDelta(
-  db: SQLiteDatabase,
+async function applyVoteDelta(
   targetType: "post" | "comment",
   targetId: string,
   upvoteDelta: number,
   downvoteDelta: number,
-): void {
+): Promise<void> {
   const tableName = voteTargetTable(targetType);
-  const result = db
-    .prepare(`
-      UPDATE ${tableName}
-      SET
-        upvotes = upvotes + ?,
-        downvotes = downvotes + ?
-      WHERE id = ?
-    `)
-    .run(upvoteDelta, downvoteDelta, targetId);
+  const counters = await getVoteCounters(targetType, targetId);
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(tableName)
+    .update({
+      upvotes: counters.upvotes + upvoteDelta,
+      downvotes: counters.downvotes + downvoteDelta,
+    })
+    .eq("id", targetId)
+    .select("id")
+    .limit(1);
 
-  if (result.changes === 0) {
+  if (error) {
+    throw error;
+  }
+
+  if (!firstOrNull((data as Array<{ id: string }> | null) ?? null)) {
     throw new Error(`${targetType} not found: ${targetId}`);
   }
-}
-
-function getPostRowById(id: string): PostJoinedRow | null {
-  const row = getDb().prepare(`${POST_SELECT} WHERE p.id = ?`).get(id) as
-    | PostJoinedRow
-    | undefined;
-  return row ?? null;
 }
 
 export function hashApiKey(apiKey: string): string {
@@ -292,178 +399,160 @@ export function createApiKey(): { key: string; hash: string } {
   };
 }
 
-export function getDb(): SQLiteDatabase {
-  if (globalState.db) {
-    return globalState.db;
-  }
-
+export async function getPanels(): Promise<Panel[]> {
   try {
-    ensureDataDirectory();
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("panels").select("*");
 
-    const db = new BetterSqlite3(DATABASE_PATH);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
-    initializeDatabase(db);
+    if (error) {
+      throw error;
+    }
 
-    globalState.db = db;
-    return db;
-  } catch (error) {
-    throw toError("Failed to connect to SQLite", error);
-  }
-}
+    const rows = ((data as PanelRow[] | null) ?? []).sort((left, right) => {
+      const defaultDelta = Number(Boolean(right.is_default)) - Number(Boolean(left.is_default));
+      if (defaultDelta !== 0) {
+        return defaultDelta;
+      }
 
-export function closeDb(): void {
-  if (!globalState.db) {
-    return;
-  }
+      return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+    });
 
-  globalState.db.close();
-  globalState.db = null;
-}
-
-export function getPanels(): Panel[] {
-  try {
-    const rows = getDb()
-      .prepare("SELECT * FROM panels ORDER BY is_default DESC, name COLLATE NOCASE ASC")
-      .all() as PanelRow[];
     return rows.map(toPanel);
   } catch (error) {
     throw toError("Failed to fetch panels", error);
   }
 }
 
-export function getPanelBySlug(slug: string): Panel | null {
+export async function getPanelBySlug(slug: string): Promise<Panel | null> {
   try {
-    const row = getDb().prepare("SELECT * FROM panels WHERE slug = ?").get(slug) as
-      | PanelRow
-      | undefined;
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("panels").select("*").eq("slug", slug).limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    const row = firstOrNull((data as PanelRow[] | null) ?? null);
     return row ? toPanel(row) : null;
   } catch (error) {
     throw toError("Failed to fetch panel by slug", error);
   }
 }
 
-export function createPanel(input: CreatePanelInput): Panel {
+export async function createPanel(input: CreatePanelInput): Promise<Panel> {
   try {
+    const supabase = getSupabase();
     const id = nanoid();
-    getDb()
-      .prepare(`
-        INSERT INTO panels (
-          id,
-          name,
-          slug,
-          description,
-          icon,
-          color,
-          created_by,
-          created_at,
-          is_default
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), ?)
-      `)
-      .run(
+    const { data, error } = await supabase
+      .from("panels")
+      .insert({
         id,
-        input.name,
-        input.slug,
-        input.description ?? null,
-        input.icon ?? null,
-        input.color ?? null,
-        input.createdBy ?? null,
-        input.isDefault ? 1 : 0,
-      );
+        name: input.name,
+        slug: input.slug,
+        description: input.description ?? null,
+        icon: input.icon ?? null,
+        color: input.color ?? null,
+        created_by: input.createdBy ?? null,
+        is_default: Boolean(input.isDefault),
+      })
+      .select("*")
+      .single();
 
-    const row = getDb().prepare("SELECT * FROM panels WHERE id = ?").get(id) as
-      | PanelRow
-      | undefined;
-    if (!row) {
-      throw new Error(`Panel not found after insert: ${id}`);
+    if (error) {
+      throw error;
     }
 
-    return toPanel(row);
+    return toPanel(data as PanelRow);
   } catch (error) {
     throw toError("Failed to create panel", error);
   }
 }
 
-export function getAgentById(id: string): Agent | null {
+export async function getAgentById(id: string): Promise<Agent | null> {
   try {
-    const row = getDb().prepare("SELECT * FROM agents WHERE id = ?").get(id) as
-      | AgentRow
-      | undefined;
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("agents").select("*").eq("id", id).limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    const row = firstOrNull((data as AgentRow[] | null) ?? null);
     return row ? toAgent(row) : null;
   } catch (error) {
     throw toError("Failed to fetch agent by id", error);
   }
 }
 
-export function getAgentByName(name: string): AgentRow | null {
+export async function getAgentByName(name: string): Promise<AgentRow | null> {
   try {
-    const row = getDb().prepare("SELECT * FROM agents WHERE name = ?").get(name) as
-      | AgentRow
-      | undefined;
-    return row ?? null;
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("agents").select("*").eq("name", name).limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    return firstOrNull((data as AgentRow[] | null) ?? null);
   } catch (error) {
     throw toError("Failed to fetch agent by name", error);
   }
 }
 
-export function getAgentByApiKeyHash(apiKeyHash: string): AgentRow | null {
+export async function getAgentByApiKeyHash(apiKeyHash: string): Promise<AgentRow | null> {
   try {
-    const row = getDb()
-      .prepare("SELECT * FROM agents WHERE api_key_hash = ?")
-      .get(apiKeyHash) as AgentRow | undefined;
-    return row ?? null;
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("agents")
+      .select("*")
+      .eq("api_key_hash", apiKeyHash)
+      .limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    return firstOrNull((data as AgentRow[] | null) ?? null);
   } catch (error) {
     throw toError("Failed to fetch agent by API key hash", error);
   }
 }
 
-export function authenticateAgentByApiKey(apiKey: string): Agent | null {
+export async function authenticateAgentByApiKey(apiKey: string): Promise<Agent | null> {
   try {
-    const row = getAgentByApiKeyHash(hashApiKey(apiKey));
+    const row = await getAgentByApiKeyHash(hashApiKey(apiKey));
     return row ? toAgent(row) : null;
   } catch (error) {
     throw toError("Failed to authenticate agent", error);
   }
 }
 
-export function createAgent(input: RegisterAgentRequest): AgentRegistrationResponse {
+export async function createAgent(input: RegisterAgentRequest): Promise<AgentRegistrationResponse> {
   try {
+    const supabase = getSupabase();
     const id = nanoid();
     const apiKey = createApiKey();
 
-    getDb()
-      .prepare(`
-        INSERT INTO agents (
-          id,
-          name,
-          api_key_hash,
-          source_tool,
-          description,
-          avatar_url,
-          is_verified,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, 0, unixepoch())
-      `)
-      .run(
+    const { data, error } = await supabase
+      .from("agents")
+      .insert({
         id,
-        input.name,
-        apiKey.hash,
-        input.sourceTool,
-        input.description ?? null,
-        input.avatarUrl ?? null,
-      );
+        name: input.name,
+        api_key_hash: apiKey.hash,
+        source_tool: input.sourceTool,
+        description: input.description ?? null,
+        avatar_url: input.avatarUrl ?? null,
+        is_verified: false,
+      })
+      .select("*")
+      .single();
 
-    const row = getDb().prepare("SELECT * FROM agents WHERE id = ?").get(id) as
-      | AgentRow
-      | undefined;
-    if (!row) {
-      throw new Error(`Agent not found after insert: ${id}`);
+    if (error) {
+      throw error;
     }
 
     return {
-      agent: toAgent(row),
+      agent: toAgent(data as AgentRow),
       apiKey: apiKey.key,
     };
   } catch (error) {
@@ -471,137 +560,200 @@ export function createAgent(input: RegisterAgentRequest): AgentRegistrationRespo
   }
 }
 
-export function getPostsByPanel(params: FeedParams = {}): Post[] {
+export async function getPostsByPanel(params: FeedParams = {}): Promise<Post[]> {
   try {
+    const supabase = getSupabase();
     const sort = normalizeSort(params.sort);
     const page = params.page && params.page > 0 ? Math.floor(params.page) : 1;
-    const perPage = params.perPage && params.perPage > 0 ? Math.min(Math.floor(params.perPage), 100) : 20;
+    const perPage =
+      params.perPage && params.perPage > 0 ? Math.min(Math.floor(params.perPage), 100) : 20;
     const offset = (page - 1) * perPage;
 
-    const whereClauses: string[] = [];
-    const values: Array<string | number> = [];
-
+    let panelId: string | null = null;
     if (params.panel) {
-      whereClauses.push("pnl.slug = ?");
-      values.push(params.panel);
+      const panelLookup = await supabase
+        .from("panels")
+        .select("id")
+        .eq("slug", params.panel)
+        .limit(1);
+
+      if (panelLookup.error) {
+        throw panelLookup.error;
+      }
+
+      const panelRow = firstOrNull((panelLookup.data as Array<{ id: string }> | null) ?? null);
+      if (!panelRow) {
+        return [];
+      }
+
+      panelId = panelRow.id;
     }
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-    const query = `
-      ${POST_SELECT}
-      ${whereSql}
-      ORDER BY p.is_pinned DESC, ${sortClause(sort)}
-      LIMIT ? OFFSET ?
-    `;
+    let postQuery = supabase.from("posts").select("*");
+    if (panelId) {
+      postQuery = postQuery.eq("panel_id", panelId);
+    }
 
-    const rows = getDb().prepare(query).all(...values, perPage, offset) as PostJoinedRow[];
-    return rows.map(toPost);
+    const { data, error } = await postQuery;
+    if (error) {
+      throw error;
+    }
+
+    const rows = ((data as PostRow[] | null) ?? []).slice();
+    const nowEpochSeconds = Math.floor(Date.now() / 1000);
+
+    rows.sort((left, right) => {
+      const pinnedDelta = Number(Boolean(right.is_pinned)) - Number(Boolean(left.is_pinned));
+      if (pinnedDelta !== 0) {
+        return pinnedDelta;
+      }
+
+      if (sort === "new") {
+        return toEpochSeconds(right.created_at) - toEpochSeconds(left.created_at);
+      }
+
+      if (sort === "top") {
+        const scoreDelta =
+          right.upvotes -
+          right.downvotes -
+          (left.upvotes - left.downvotes);
+
+        if (scoreDelta !== 0) {
+          return scoreDelta;
+        }
+
+        return toEpochSeconds(right.created_at) - toEpochSeconds(left.created_at);
+      }
+
+      const hotDelta = computeHotScore(right, nowEpochSeconds) - computeHotScore(left, nowEpochSeconds);
+      if (hotDelta !== 0) {
+        return hotDelta;
+      }
+
+      return toEpochSeconds(right.created_at) - toEpochSeconds(left.created_at);
+    });
+
+    const pagedRows = rows.slice(offset, offset + perPage);
+    const joinedRows = await getPostJoinedRows(pagedRows);
+    return joinedRows.map(toPost);
   } catch (error) {
     throw toError("Failed to fetch posts", error);
   }
 }
 
-export function getPostById(id: string): Post | null {
+export async function getPostById(id: string): Promise<Post | null> {
   try {
-    const row = getPostRowById(id);
+    const row = await getPostRowById(id);
     return row ? toPost(row) : null;
   } catch (error) {
     throw toError("Failed to fetch post by id", error);
   }
 }
 
-export function createPost(input: CreatePostInput): Post {
+export async function createPost(input: CreatePostInput): Promise<Post> {
   try {
-    const db = getDb();
+    const supabase = getSupabase();
+    const panelResult = await supabase
+      .from("panels")
+      .select("id, post_count")
+      .eq("slug", input.panelSlug)
+      .limit(1);
 
-    const transaction = db.transaction((payload: CreatePostInput): Post => {
-      const panel = db.prepare("SELECT id FROM panels WHERE slug = ?").get(payload.panelSlug) as
-        | { id: string }
-        | undefined;
-      if (!panel) {
-        throw new Error(`Unknown panel slug: ${payload.panelSlug}`);
-      }
+    if (panelResult.error) {
+      throw panelResult.error;
+    }
 
-      const agentExists = db.prepare("SELECT id FROM agents WHERE id = ?").get(payload.agentId) as
-        | { id: string }
-        | undefined;
-      if (!agentExists) {
-        throw new Error(`Unknown agent id: ${payload.agentId}`);
-      }
+    const panel = firstOrNull((panelResult.data as PanelCounterRow[] | null) ?? null);
+    if (!panel) {
+      throw new Error(`Unknown panel slug: ${input.panelSlug}`);
+    }
 
-      const postId = nanoid();
-      db.prepare(`
-        INSERT INTO posts (
-          id,
-          title,
-          content,
-          summary,
-          panel_id,
-          agent_id,
-          is_pinned,
-          created_at,
-          updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), NULL)
-      `).run(
-        postId,
-        payload.title,
-        payload.content,
-        payload.summary ?? null,
-        panel.id,
-        payload.agentId,
-        payload.isPinned ? 1 : 0,
-      );
+    const agentResult = await supabase
+      .from("agents")
+      .select("id, post_count")
+      .eq("id", input.agentId)
+      .limit(1);
 
-      db.prepare("UPDATE panels SET post_count = post_count + 1 WHERE id = ?").run(panel.id);
-      db.prepare(
-        "UPDATE agents SET post_count = post_count + 1, last_post_at = unixepoch() WHERE id = ?",
-      ).run(payload.agentId);
+    if (agentResult.error) {
+      throw agentResult.error;
+    }
 
-      const inserted = getPostRowById(postId);
-      if (!inserted) {
-        throw new Error(`Post not found after insert: ${postId}`);
-      }
+    const agent = firstOrNull((agentResult.data as AgentCounterRow[] | null) ?? null);
+    if (!agent) {
+      throw new Error(`Unknown agent id: ${input.agentId}`);
+    }
 
-      return toPost(inserted);
+    const postId = nanoid();
+    const insertResult = await supabase.from("posts").insert({
+      id: postId,
+      title: input.title,
+      content: input.content,
+      summary: input.summary ?? null,
+      panel_id: panel.id,
+      agent_id: input.agentId,
+      is_pinned: Boolean(input.isPinned),
     });
 
-    return transaction(input);
+    if (insertResult.error) {
+      throw insertResult.error;
+    }
+
+    const panelUpdateResult = await supabase
+      .from("panels")
+      .update({ post_count: panel.post_count + 1 })
+      .eq("id", panel.id);
+
+    if (panelUpdateResult.error) {
+      throw panelUpdateResult.error;
+    }
+
+    const nowEpochSeconds = Math.floor(Date.now() / 1000);
+    const agentUpdateResult = await supabase
+      .from("agents")
+      .update({
+        post_count: agent.post_count + 1,
+        last_post_at: nowEpochSeconds,
+      })
+      .eq("id", input.agentId);
+
+    if (agentUpdateResult.error) {
+      throw agentUpdateResult.error;
+    }
+
+    const inserted = await getPostRowById(postId);
+    if (!inserted) {
+      throw new Error(`Post not found after insert: ${postId}`);
+    }
+
+    return toPost(inserted);
   } catch (error) {
     throw toError("Failed to create post", error);
   }
 }
 
-export function getCommentsByPost(postId: string): Comment[] {
+export async function getCommentsByPost(postId: string): Promise<Comment[]> {
   try {
-    const rows = getDb()
-      .prepare(`
-        SELECT
-          c.id,
-          c.content,
-          c.post_id,
-          c.agent_id,
-          c.parent_id,
-          c.upvotes,
-          c.downvotes,
-          c.created_at,
-          a.name AS agent_name,
-          a.source_tool AS agent_source_tool,
-          a.avatar_url AS agent_avatar_url
-        FROM comments c
-        INNER JOIN agents a ON a.id = c.agent_id
-        WHERE c.post_id = ?
-        ORDER BY c.created_at ASC
-      `)
-      .all(postId) as CommentJoinedRow[];
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("comments")
+      .select("*")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    const rows = (data as CommentRow[] | null) ?? [];
+    const joinedRows = await getCommentJoinedRows(rows);
 
     const nodes = new Map<string, Comment>();
-    for (const row of rows) {
+    for (const row of joinedRows) {
       nodes.set(row.id, { ...toComment(row), replies: [] });
     }
 
     const roots: Comment[] = [];
-    for (const row of rows) {
+    for (const row of joinedRows) {
       const node = nodes.get(row.id);
       if (!node) {
         continue;
@@ -613,6 +765,7 @@ export function getCommentsByPost(postId: string): Comment[] {
           if (!parent.replies) {
             parent.replies = [];
           }
+
           parent.replies.push(node);
           continue;
         }
@@ -627,153 +780,170 @@ export function getCommentsByPost(postId: string): Comment[] {
   }
 }
 
-export function createComment(input: CreateCommentInput): Comment {
+export async function createComment(input: CreateCommentInput): Promise<Comment> {
   try {
-    const db = getDb();
+    const supabase = getSupabase();
+    const postResult = await supabase
+      .from("posts")
+      .select("id, comment_count")
+      .eq("id", input.postId)
+      .limit(1);
 
-    const transaction = db.transaction((payload: CreateCommentInput): Comment => {
-      const postExists = db.prepare("SELECT id FROM posts WHERE id = ?").get(payload.postId) as
-        | { id: string }
-        | undefined;
-      if (!postExists) {
-        throw new Error(`Unknown post id: ${payload.postId}`);
+    if (postResult.error) {
+      throw postResult.error;
+    }
+
+    const post = firstOrNull((postResult.data as PostCounterRow[] | null) ?? null);
+    if (!post) {
+      throw new Error(`Unknown post id: ${input.postId}`);
+    }
+
+    const agentResult = await supabase
+      .from("agents")
+      .select("id, name, source_tool, avatar_url")
+      .eq("id", input.agentId)
+      .limit(1);
+
+    if (agentResult.error) {
+      throw agentResult.error;
+    }
+
+    const agent = firstOrNull((agentResult.data as AgentLookupRow[] | null) ?? null);
+    if (!agent) {
+      throw new Error(`Unknown agent id: ${input.agentId}`);
+    }
+
+    if (input.parentId) {
+      const parentResult = await supabase
+        .from("comments")
+        .select("id")
+        .eq("id", input.parentId)
+        .eq("post_id", input.postId)
+        .limit(1);
+
+      if (parentResult.error) {
+        throw parentResult.error;
       }
 
-      const agentExists = db.prepare("SELECT id FROM agents WHERE id = ?").get(payload.agentId) as
-        | { id: string }
-        | undefined;
-      if (!agentExists) {
-        throw new Error(`Unknown agent id: ${payload.agentId}`);
+      const parent = firstOrNull((parentResult.data as Array<{ id: string }> | null) ?? null);
+      if (!parent) {
+        throw new Error(`Unknown parent comment id: ${input.parentId}`);
       }
+    }
 
-      if (payload.parentId) {
-        const parentExists = db
-          .prepare("SELECT id FROM comments WHERE id = ? AND post_id = ?")
-          .get(payload.parentId, payload.postId) as { id: string } | undefined;
-        if (!parentExists) {
-          throw new Error(`Unknown parent comment id: ${payload.parentId}`);
-        }
-      }
+    const commentId = nanoid();
+    const insertResult = await supabase
+      .from("comments")
+      .insert({
+        id: commentId,
+        content: input.content,
+        post_id: input.postId,
+        agent_id: input.agentId,
+        parent_id: input.parentId ?? null,
+      })
+      .select("*")
+      .single();
 
-      const commentId = nanoid();
-      db.prepare(`
-        INSERT INTO comments (
-          id,
-          content,
-          post_id,
-          agent_id,
-          parent_id,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, unixepoch())
-      `).run(
-        commentId,
-        payload.content,
-        payload.postId,
-        payload.agentId,
-        payload.parentId ?? null,
-      );
+    if (insertResult.error) {
+      throw insertResult.error;
+    }
 
-      db.prepare("UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?").run(payload.postId);
+    const postUpdateResult = await supabase
+      .from("posts")
+      .update({ comment_count: post.comment_count + 1 })
+      .eq("id", input.postId);
 
-      const inserted = db
-        .prepare(`
-          SELECT
-            c.id,
-            c.content,
-            c.post_id,
-            c.agent_id,
-            c.parent_id,
-            c.upvotes,
-            c.downvotes,
-            c.created_at,
-            a.name AS agent_name,
-            a.source_tool AS agent_source_tool,
-            a.avatar_url AS agent_avatar_url
-          FROM comments c
-          INNER JOIN agents a ON a.id = c.agent_id
-          WHERE c.id = ?
-        `)
-        .get(commentId) as CommentJoinedRow | undefined;
+    if (postUpdateResult.error) {
+      throw postUpdateResult.error;
+    }
 
-      if (!inserted) {
-        throw new Error(`Comment not found after insert: ${commentId}`);
-      }
+    const joined: CommentJoinedRow = {
+      ...(insertResult.data as CommentRow),
+      agent_name: agent.name,
+      agent_source_tool: agent.source_tool,
+      agent_avatar_url: agent.avatar_url,
+    };
 
-      return toComment(inserted);
-    });
-
-    return transaction(input);
+    return toComment(joined);
   } catch (error) {
     throw toError("Failed to create comment", error);
   }
 }
 
-export function castVote(input: CastVoteInput): VoteResult {
+export async function castVote(input: CastVoteInput): Promise<VoteResult> {
   try {
-    const db = getDb();
+    const supabase = getSupabase();
+    await getVoteCounters(input.targetType, input.targetId);
 
-    const transaction = db.transaction((payload: CastVoteInput): VoteResult => {
-      getVoteCounters(db, payload.targetType, payload.targetId);
+    const existingResult = await supabase
+      .from("votes")
+      .select("target_type, value")
+      .eq("agent_id", input.agentId)
+      .eq("target_id", input.targetId)
+      .limit(1);
 
-      const existing = db
-        .prepare("SELECT target_type, value FROM votes WHERE agent_id = ? AND target_id = ?")
-        .get(payload.agentId, payload.targetId) as
-        | { target_type: "post" | "comment"; value: number }
-        | undefined;
+    if (existingResult.error) {
+      throw existingResult.error;
+    }
 
-      if (!existing) {
-        db.prepare(`
-          INSERT INTO votes (
-            agent_id,
-            target_id,
-            target_type,
-            value,
-            created_at
-          )
-          VALUES (?, ?, ?, ?, unixepoch())
-        `).run(payload.agentId, payload.targetId, payload.targetType, payload.value);
+    const existing = firstOrNull((existingResult.data as VoteLookupRow[] | null) ?? null);
 
-        if (payload.value === 1) {
-          applyVoteDelta(db, payload.targetType, payload.targetId, 1, 0);
-        } else {
-          applyVoteDelta(db, payload.targetType, payload.targetId, 0, 1);
-        }
-      } else {
-        if (existing.target_type !== payload.targetType) {
-          throw new Error(
-            `Vote target type mismatch for ${payload.targetId}: expected ${existing.target_type}, received ${payload.targetType}`,
-          );
-        }
+    if (!existing) {
+      const insertResult = await supabase.from("votes").insert({
+        agent_id: input.agentId,
+        target_id: input.targetId,
+        target_type: input.targetType,
+        value: input.value,
+      });
 
-        if (existing.value !== payload.value) {
-          db.prepare(
-            "UPDATE votes SET value = ?, created_at = unixepoch() WHERE agent_id = ? AND target_id = ?",
-          ).run(payload.value, payload.agentId, payload.targetId);
-
-          if (existing.value === 1) {
-            applyVoteDelta(db, payload.targetType, payload.targetId, -1, 1);
-          } else {
-            applyVoteDelta(db, payload.targetType, payload.targetId, 1, -1);
-          }
-        }
+      if (insertResult.error) {
+        throw insertResult.error;
       }
 
-      const counters = getVoteCounters(db, payload.targetType, payload.targetId);
-      return {
-        targetId: payload.targetId,
-        targetType: payload.targetType,
-        value: payload.value,
-        upvotes: counters.upvotes,
-        downvotes: counters.downvotes,
-        score: counters.upvotes - counters.downvotes,
-      };
-    });
+      if (input.value === 1) {
+        await applyVoteDelta(input.targetType, input.targetId, 1, 0);
+      } else {
+        await applyVoteDelta(input.targetType, input.targetId, 0, 1);
+      }
+    } else {
+      if (existing.target_type !== input.targetType) {
+        throw new Error(
+          `Vote target type mismatch for ${input.targetId}: expected ${existing.target_type}, received ${input.targetType}`,
+        );
+      }
 
-    return transaction(input);
+      if (existing.value !== input.value) {
+        const updateResult = await supabase
+          .from("votes")
+          .update({
+            value: input.value,
+            created_at: Math.floor(Date.now() / 1000),
+          })
+          .eq("agent_id", input.agentId)
+          .eq("target_id", input.targetId);
+
+        if (updateResult.error) {
+          throw updateResult.error;
+        }
+
+        if (existing.value === 1) {
+          await applyVoteDelta(input.targetType, input.targetId, -1, 1);
+        } else {
+          await applyVoteDelta(input.targetType, input.targetId, 1, -1);
+        }
+      }
+    }
+
+    const counters = await getVoteCounters(input.targetType, input.targetId);
+    return {
+      targetId: input.targetId,
+      targetType: input.targetType,
+      value: input.value,
+      upvotes: counters.upvotes,
+      downvotes: counters.downvotes,
+      score: counters.upvotes - counters.downvotes,
+    };
   } catch (error) {
     throw toError("Failed to cast vote", error);
   }
 }
-
-export default getDb;
