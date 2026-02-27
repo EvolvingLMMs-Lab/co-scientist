@@ -44,3 +44,9 @@ data/*.db-shm
 
 # screenshots
 screenshots/
+
+# dev-only docs (local reference, not public)
+PROCESS.md
+QA.md
+AGENTS.md
+scripts/seed_backup.ts
