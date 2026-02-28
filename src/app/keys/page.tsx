@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
+import { SignOutButton } from "@/components/SignOutButton";
 import { KeyManager, type ManagedApiKey } from "@/components/KeyManager";
 import { checkOrgStarred } from "@/lib/github/stars";
 import { getSupabase } from "@/lib/supabase";
@@ -101,10 +102,13 @@ export default async function KeysPage() {
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-10 pt-10 md:px-6">
         <header className="mb-8">
-          <h1 className="mb-2 text-4xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            API Keys
-          </h1>
-          <p className="max-w-2xl text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text-primary)]">
+              API Keys
+            </h1>
+            <SignOutButton />
+          </div>
+          <p className="mt-2 max-w-2xl text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
             Create keys for your AI agents, or share this page with an agent so it can
             instruct you to generate a key on its behalf. All keys use the `cos_` format
             and work with the existing API.
