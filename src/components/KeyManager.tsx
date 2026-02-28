@@ -59,6 +59,31 @@ function maskPrefix(prefix: string): string {
   return `${prefix}...`;
 }
 
+function AgentAvatar({ name, avatarUrl, size = 10 }: { name: string; avatarUrl?: string; size?: number }) {
+  const initials = name.charAt(0).toUpperCase();
+  const sizeClass = size === 10 ? "h-10 w-10" : "h-8 w-8";
+  const textSize = size === 10 ? "text-sm" : "text-xs";
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={`${name} avatar`}
+        className={`${sizeClass} shrink-0 border border-[var(--color-border)] object-cover grayscale`}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`${sizeClass} inline-flex shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] ${textSize} font-medium text-[var(--color-text-secondary)]`}
+      aria-hidden="true"
+    >
+      {initials || "?"}
+    </span>
+  );
+}
+
 export function KeyManager({
   initialKeys,
   initialHasStarred,
@@ -326,7 +351,7 @@ export function KeyManager({
           </div>
         ) : (
           <p className="text-sm font-light text-[var(--color-text-secondary)]">
-            Star at least one EvolvingLMMs-Lab repository, then click "Refresh Stars".
+            Star at least one EvolvingLMMs-Lab repository, then click &quot;Refresh Stars&quot;.
           </p>
         )}
 
@@ -378,7 +403,7 @@ export function KeyManager({
 
       <div className="border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-5">
         <h2 className="mb-4 text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
-          Existing Keys
+          Your Agents
         </h2>
 
         {keys.length === 0 ? (
@@ -387,35 +412,60 @@ export function KeyManager({
           </p>
         ) : (
           <ul className="space-y-3">
-            {keys.map((key) => (
-              <li
-                key={key.id}
-                className="border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                      {key.label || key.agentName}
+            {keys.map((key) => {
+              const cardContent = (
+                <>
+                  <AgentAvatar name={key.agentName} avatarUrl={key.avatarUrl} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover/agent:underline">
+                      {key.agentName}
                     </p>
-                    <p className="text-xs font-light text-[var(--color-text-muted)]">
-                      {maskPrefix(key.keyPrefix)} · {key.agentName} · {key.sourceTool}
+                    {key.label ? (
+                      <p className="mt-0.5 text-xs font-light text-[var(--color-text-secondary)]">
+                        {key.label}
+                      </p>
+                    ) : null}
+                    <p className="mt-0.5 text-xs font-light text-[var(--color-text-muted)]">
+                      {maskPrefix(key.keyPrefix)} · {key.sourceTool}
                     </p>
                     <p className="text-xs font-light text-[var(--color-text-muted)]">
                       Created {formatCreatedAt(key.createdAt)}
                     </p>
                   </div>
+                </>
+              );
 
-                  <button
-                    type="button"
-                    onClick={() => revokeKey(key.id)}
-                    disabled={revokingId === key.id}
-                    className="border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-border-hover)] disabled:opacity-50"
-                  >
-                    {revokingId === key.id ? "Revoking..." : "Revoke"}
-                  </button>
-                </div>
-              </li>
-            ))}
+              return (
+                <li
+                  key={key.id}
+                  className="border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-4 transition-colors hover:border-[var(--color-border-light)]"
+                >
+                  <div className="flex items-center gap-4">
+                    {key.agentId ? (
+                      <a
+                        href={`/agents/${key.agentId}`}
+                        className="group/agent flex min-w-0 flex-1 items-center gap-4"
+                      >
+                        {cardContent}
+                      </a>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 items-center gap-4">
+                        {cardContent}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => revokeKey(key.id)}
+                      disabled={revokingId === key.id}
+                      className="shrink-0 border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-border-hover)] disabled:opacity-50"
+                    >
+                      {revokingId === key.id ? "Revoking..." : "Revoke"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
