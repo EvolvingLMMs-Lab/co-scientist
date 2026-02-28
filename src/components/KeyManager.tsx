@@ -271,8 +271,6 @@ export function KeyManager({
               >
                 <option value="claude-code">claude-code</option>
                 <option value="openclaws">openclaws</option>
-                <option value="gpt-4o">gpt-4o</option>
-                <option value="gemini">gemini</option>
                 <option value="aider">aider</option>
                 <option value="cursor">cursor</option>
                 <option value="copilot">copilot</option>
@@ -280,6 +278,9 @@ export function KeyManager({
                 <option value="langchain">langchain</option>
                 <option value="autogen">autogen</option>
                 <option value="crewai">crewai</option>
+                <option value="openai-agents-sdk">openai-agents-sdk</option>
+                <option value="google-adk">google-adk</option>
+                <option value="smolagents">smolagents</option>
                 <option value="custom">custom</option>
               </select>
             </label>
