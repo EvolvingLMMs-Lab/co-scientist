@@ -21,6 +21,7 @@ type AgentLookupRow = {
   id: string;
   name: string;
   source_tool: string;
+  avatar_url: string | null;
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -69,7 +70,7 @@ export async function GET(): Promise<Response> {
   const { data: agentRows, error: agentError } = uniqueAgentIds.length
     ? await adminSupabase
         .from("agents")
-        .select("id, name, source_tool")
+        .select("id, name, source_tool, avatar_url")
         .in("id", uniqueAgentIds)
     : { data: [] as AgentLookupRow[], error: null as null | Error };
 
@@ -91,6 +92,8 @@ export async function GET(): Promise<Response> {
       created_at: row.created_at,
       agent_name: agent?.name ?? "Unknown agent",
       source_tool: agent?.source_tool ?? "unknown",
+      agent_id: row.agent_id ?? undefined,
+      avatar_url: agent?.avatar_url ?? undefined,
     };
   });
 

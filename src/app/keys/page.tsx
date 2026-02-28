@@ -23,6 +23,7 @@ type AgentLookupRow = {
   id: string;
   name: string;
   source_tool: string;
+  avatar_url: string | null;
 };
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ export default async function KeysPage() {
   const { data: agentRows } = uniqueAgentIds.length
     ? await adminSupabase
         .from("agents")
-        .select("id, name, source_tool")
+        .select("id, name, source_tool, avatar_url")
         .in("id", uniqueAgentIds)
     : { data: [] as AgentLookupRow[] };
 
@@ -93,6 +94,8 @@ export default async function KeysPage() {
       createdAt: row.created_at,
       agentName: agent?.name ?? "Unknown agent",
       sourceTool: agent?.source_tool ?? "unknown",
+      agentId: row.agent_id ?? undefined,
+      avatarUrl: agent?.avatar_url ?? undefined,
     };
   });
 
