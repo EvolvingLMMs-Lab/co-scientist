@@ -59,24 +59,22 @@ function maskPrefix(prefix: string): string {
   return `${prefix}...`;
 }
 
-function AgentAvatar({ name, avatarUrl, size = 10 }: { name: string; avatarUrl?: string; size?: number }) {
+function AgentAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   const initials = name.charAt(0).toUpperCase();
-  const sizeClass = size === 10 ? "h-10 w-10" : "h-8 w-8";
-  const textSize = size === 10 ? "text-sm" : "text-xs";
 
   if (avatarUrl) {
     return (
       <img
         src={avatarUrl}
         alt={`${name} avatar`}
-        className={`${sizeClass} shrink-0 border border-[var(--color-border)] object-cover grayscale`}
+        className="h-14 w-14 shrink-0 border border-[var(--color-border)] object-cover grayscale"
       />
     );
   }
 
   return (
     <span
-      className={`${sizeClass} inline-flex shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] ${textSize} font-medium text-[var(--color-text-secondary)]`}
+      className="inline-flex h-14 w-14 shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-lg font-medium text-[var(--color-text-secondary)]"
       aria-hidden="true"
     >
       {initials || "?"}
@@ -417,20 +415,26 @@ export function KeyManager({
                 <>
                   <AgentAvatar name={key.agentName} avatarUrl={key.avatarUrl} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover/agent:underline">
-                      {key.agentName}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-bold text-[var(--color-text-primary)] group-hover/agent:underline">
+                        {key.agentName}
+                      </p>
+                      <span className="border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                        {key.sourceTool}
+                      </span>
+                    </div>
                     {key.label ? (
-                      <p className="mt-0.5 text-xs font-light text-[var(--color-text-secondary)]">
+                      <p className="mt-1 text-xs font-light text-[var(--color-text-secondary)]">
                         {key.label}
                       </p>
                     ) : null}
-                    <p className="mt-0.5 text-xs font-light text-[var(--color-text-muted)]">
-                      {maskPrefix(key.keyPrefix)} · {key.sourceTool}
-                    </p>
-                    <p className="text-xs font-light text-[var(--color-text-muted)]">
-                      Created {formatCreatedAt(key.createdAt)}
-                    </p>
+                    <div className="mt-1.5 flex items-center gap-2 text-xs font-light text-[var(--color-text-muted)]">
+                      <code className="border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-muted)]">
+                        {maskPrefix(key.keyPrefix)}
+                      </code>
+                      <span>·</span>
+                      <span>{formatCreatedAt(key.createdAt)}</span>
+                    </div>
                   </div>
                 </>
               );
@@ -438,18 +442,18 @@ export function KeyManager({
               return (
                 <li
                   key={key.id}
-                  className="border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-4 transition-colors hover:border-[var(--color-border-light)]"
+                  className="border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-5 transition-colors hover:border-[var(--color-border-light)]"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-5">
                     {key.agentId ? (
                       <a
                         href={`/agents/${key.agentId}`}
-                        className="group/agent flex min-w-0 flex-1 items-center gap-4"
+                        className="group/agent flex min-w-0 flex-1 items-center gap-5"
                       >
                         {cardContent}
                       </a>
                     ) : (
-                      <div className="flex min-w-0 flex-1 items-center gap-4">
+                      <div className="flex min-w-0 flex-1 items-center gap-5">
                         {cardContent}
                       </div>
                     )}
@@ -458,7 +462,7 @@ export function KeyManager({
                       type="button"
                       onClick={() => revokeKey(key.id)}
                       disabled={revokingId === key.id}
-                      className="shrink-0 border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-border-hover)] disabled:opacity-50"
+                      className="shrink-0 border border-[var(--color-border)] px-4 py-2 text-xs font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
                     >
                       {revokingId === key.id ? "Revoking..." : "Revoke"}
                     </button>
