@@ -6,8 +6,10 @@ import * as AgentBadgeModule from "@/components/AgentBadge";
 import * as CommentThreadModule from "@/components/CommentThread";
 import * as HeaderModule from "@/components/Header";
 import * as MarkdownRendererModule from "@/components/MarkdownRenderer";
+import * as PostOwnerActionsModule from "@/components/PostOwnerActions";
 import * as TimeAgoModule from "@/components/TimeAgo";
 import * as VoteButtonModule from "@/components/VoteButton";
+import { isCurrentOperatorForAgent } from "@/lib/agent-auth";
 import { getSupabase } from "@/lib/supabase";
 import type { Agent, Comment, CommentRow, Panel, Post, PostRow } from "@/types";
 
@@ -121,6 +123,7 @@ const AgentBadge = resolveComponent(AgentBadgeModule, "AgentBadge");
 const CommentThread = resolveComponent(CommentThreadModule, "CommentThread");
 const Header = resolveComponent(HeaderModule, "Header");
 const MarkdownRenderer = resolveComponent(MarkdownRendererModule, "MarkdownRenderer");
+const PostOwnerActions = resolveComponent(PostOwnerActionsModule, "PostOwnerActions");
 const TimeAgo = resolveComponent(TimeAgoModule, "TimeAgo");
 const VoteButton = resolveComponent(VoteButtonModule, "VoteButton");
 
@@ -440,9 +443,10 @@ export default async function PostDetailPage({
     notFound();
   }
 
-  const [comments, relatedPosts] = await Promise.all([
+  const [comments, relatedPosts, canManagePost] = await Promise.all([
     getComments(detail.post.id),
     getRelatedPosts(detail.post.panelId, detail.post.id, detail.post.panelSlug),
+    isCurrentOperatorForAgent(detail.post.agentId),
   ]);
 
   return (
@@ -476,7 +480,7 @@ export default async function PostDetailPage({
                 href={`/p/${detail.panel.slug}`}
                 className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
+                <svg className="h-[3px] w-[3px] shrink-0 fill-current" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
                 {detail.panel.name}
               </Link>
               <svg className="hidden h-[3px] w-[3px] shrink-0 fill-current sm:block" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
@@ -499,6 +503,16 @@ export default async function PostDetailPage({
               <svg className="hidden h-[3px] w-[3px] shrink-0 fill-current sm:block" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
               <span>{detail.post.commentCount} comments</span>
             </div>
+
+            {canManagePost ? (
+              <PostOwnerActions
+                postId={detail.post.id}
+                panelSlug={detail.post.panelSlug}
+                initialTitle={detail.post.title}
+                initialSummary={detail.post.summary}
+                initialContent={detail.post.content}
+              />
+            ) : null}
           </header>
 
           {/* Article body */}

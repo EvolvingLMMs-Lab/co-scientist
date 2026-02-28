@@ -1,4 +1,4 @@
-import { authenticateAgent } from "@/lib/agent-auth";
+import { authenticateAgentOrOperator } from "@/lib/agent-auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabase } from "@/lib/supabase";
 import { updatePostSchema, validateBody } from "@/lib/validation";
@@ -192,8 +192,8 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const agent = await authenticateAgent(request);
-  if (!agent) {
+  const authenticatedAgent = await authenticateAgentOrOperator(request);
+  if (!authenticatedAgent) {
     return jsonResponse(
       {
         ok: false,
@@ -242,7 +242,13 @@ export async function DELETE(
       );
     }
 
-    if (existing.agent_id !== agent.id) {
+    let canDelete = existing.agent_id === authenticatedAgent.id;
+    if (!canDelete) {
+      const ownerAgent = await authenticateAgentOrOperator(request, existing.agent_id);
+      canDelete = ownerAgent?.id === existing.agent_id;
+    }
+
+    if (!canDelete) {
       return jsonResponse(
         {
           ok: false,
@@ -374,34 +380,14 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const agent = await authenticateAgent(request);
-  if (!agent) {
+  const authenticatedAgent = await authenticateAgentOrOperator(request);
+  if (!authenticatedAgent) {
     return jsonResponse(
       {
         ok: false,
         error: "Unauthorized.",
       },
       401,
-    );
-  }
-
-  const rateLimit = checkRateLimit(agent.id, "post") as {
-    allowed: boolean;
-    remaining: number;
-    resetAt: number;
-  };
-  const rateLimitHeaders: HeadersInit = {
-    "X-RateLimit-Remaining": String(rateLimit.remaining),
-    "X-RateLimit-Reset": String(rateLimit.resetAt),
-  };
-  if (!rateLimit.allowed) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "Rate limit exceeded.",
-      },
-      429,
-      rateLimitHeaders,
     );
   }
 
@@ -413,7 +399,6 @@ export async function PATCH(
         error: "Post ID is required.",
       },
       400,
-      rateLimitHeaders,
     );
   }
 
@@ -430,7 +415,6 @@ export async function PATCH(
         error: "At least one field must be provided.",
       },
       400,
-      rateLimitHeaders,
     );
   }
 
@@ -449,7 +433,6 @@ export async function PATCH(
           error: "Failed to update post.",
         },
         500,
-        rateLimitHeaders,
       );
     }
 
@@ -460,11 +443,39 @@ export async function PATCH(
           error: "Post not found.",
         },
         404,
+      );
+    }
+
+    let actingAgent = authenticatedAgent;
+    if (existing.agent_id !== actingAgent.id) {
+      const ownerAgent = await authenticateAgentOrOperator(request, existing.agent_id);
+      if (ownerAgent) {
+        actingAgent = ownerAgent;
+      }
+    }
+
+    const rateLimit = checkRateLimit(actingAgent.id, "post") as {
+      allowed: boolean;
+      remaining: number;
+      resetAt: number;
+    };
+    const rateLimitHeaders: HeadersInit = {
+      "X-RateLimit-Remaining": String(rateLimit.remaining),
+      "X-RateLimit-Reset": String(rateLimit.resetAt),
+    };
+
+    if (!rateLimit.allowed) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Rate limit exceeded.",
+        },
+        429,
         rateLimitHeaders,
       );
     }
 
-    if (existing.agent_id !== agent.id) {
+    if (existing.agent_id !== actingAgent.id) {
       return jsonResponse(
         {
           ok: false,
@@ -551,7 +562,6 @@ export async function PATCH(
         error: "Failed to update post.",
       },
       500,
-      rateLimitHeaders,
     );
   }
 }

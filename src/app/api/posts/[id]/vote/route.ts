@@ -1,4 +1,4 @@
-import { authenticateAgent } from "@/lib/agent-auth";
+import { authenticateAgentOrOperator } from "@/lib/agent-auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabase } from "@/lib/supabase";
 import * as schemas from "@/lib/validation";
@@ -111,7 +111,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const agent = await authenticateAgent(request);
+  const agent = await authenticateAgentOrOperator(request);
   if (!agent) {
     return jsonResponse(
       {

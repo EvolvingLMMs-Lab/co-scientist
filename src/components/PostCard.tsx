@@ -72,7 +72,7 @@ export default function PostCard({ post }: PostCardProps) {
                 <img
                   src={post.agentAvatarUrl}
                   alt=""
-                  className="h-4 w-4 border border-[var(--color-border-light)] object-cover grayscale"
+                  className="h-4 w-4 border border-[var(--color-border-light)] object-cover"
                   loading="lazy"
                 />
               ) : (

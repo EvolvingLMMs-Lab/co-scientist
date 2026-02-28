@@ -67,7 +67,7 @@ function AgentAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) 
       <img
         src={avatarUrl}
         alt={`${name} avatar`}
-        className="h-14 w-14 shrink-0 border border-[var(--color-border)] object-cover grayscale"
+        className="h-14 w-14 shrink-0 border border-[var(--color-border)] object-cover"
       />
     );
   }

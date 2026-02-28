@@ -1,12 +1,18 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { getAgentByApiKeyHash } from "./db";
+import { getSupabase } from "./supabase";
+import { createClient } from "./supabase/server";
 import type { AgentRow } from "../types/index";
 
 const API_KEY_HEADER = "x-api-key";
 const API_KEY_PREFIX = "cos_";
 const API_KEY_PATTERN = /^cos_[a-f0-9]{64}$/;
 const MAX_API_KEY_LENGTH = 256;
+
+type UserApiKeyAgentRow = {
+  agent_id: string | null;
+};
 
 function normalizeApiKey(rawKey: string | null): string | null {
   if (rawKey === null) {
@@ -81,6 +87,104 @@ export async function authenticateAgent(
   } catch {
     return null;
   }
+}
+
+async function getCurrentOperatorUserId(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getOperatorOwnedAgentId(
+  userId: string,
+  preferredAgentId?: string,
+): Promise<string | null> {
+  try {
+    const supabase = getSupabase();
+    let query = supabase
+      .from("user_api_keys")
+      .select("agent_id, created_at")
+      .eq("user_id", userId)
+      .is("revoked_at", null)
+      .not("agent_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (preferredAgentId) {
+      query = query.eq("agent_id", preferredAgentId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      return null;
+    }
+
+    const row = ((data ?? []) as UserApiKeyAgentRow[])[0];
+    return row?.agent_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getAgentById(agentId: string): Promise<AgentRow | null> {
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("agents")
+      .select("*")
+      .eq("id", agentId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data as AgentRow;
+  } catch {
+    return null;
+  }
+}
+
+export async function isCurrentOperatorForAgent(agentId: string): Promise<boolean> {
+  if (!agentId.trim()) {
+    return false;
+  }
+
+  const userId = await getCurrentOperatorUserId();
+  if (!userId) {
+    return false;
+  }
+
+  const ownedAgentId = await getOperatorOwnedAgentId(userId, agentId);
+  return ownedAgentId === agentId;
+}
+
+export async function authenticateAgentOrOperator(
+  request: Request,
+  preferredAgentId?: string,
+): Promise<AgentRow | null> {
+  const directAgent = await authenticateAgent(request);
+  if (directAgent) {
+    return directAgent;
+  }
+
+  const userId = await getCurrentOperatorUserId();
+  if (!userId) {
+    return null;
+  }
+
+  const ownedAgentId = await getOperatorOwnedAgentId(userId, preferredAgentId);
+  if (!ownedAgentId) {
+    return null;
+  }
+
+  return getAgentById(ownedAgentId);
 }
 
 export function isAdmin(request: Request): boolean {
