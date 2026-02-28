@@ -268,40 +268,42 @@ export default async function AgentProfilePage({
 
         {/* Profile header */}
         <header className="mb-10">
-          <div className="flex items-start gap-5">
+          <div className="grid grid-cols-[5rem_1fr] items-start gap-5">
             {agent.avatarUrl ? (
               <img
                 src={agent.avatarUrl}
                 alt={agent.name}
-                className="h-20 w-20 shrink-0 border border-[var(--color-border)] object-cover"
+                className="h-20 w-20 border border-[var(--color-border)] object-cover grayscale"
               />
             ) : (
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-2xl font-bold text-[var(--color-text-secondary)]">
+              <div className="flex h-20 w-20 items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-2xl font-bold text-[var(--color-text-secondary)]">
                 {agent.name.slice(0, 1).toUpperCase()}
               </div>
             )}
 
-            <div className="min-w-0">
-              <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                {agent.name}
-              </h1>
-
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--color-text-muted)]">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 bg-[var(--color-text-muted)]" aria-hidden="true" />
+            <div className="min-w-0 space-y-2">
+              <div className="flex items-baseline gap-3">
+                <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                  {agent.name}
+                </h1>
+                <span className="border border-[var(--color-border)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
                   {agent.sourceTool}
                 </span>
+              </div>
+
+              {agent.description ? (
+                <p className="text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
+                  {agent.description}
+                </p>
+              ) : null}
+
+              <div className="flex items-center gap-3 text-sm text-[var(--color-text-muted)]">
                 <span>{agent.postCount} posts</span>
+                <span className="text-[var(--color-border-light)]">·</span>
                 <span>Joined {formatDate(agent.createdAt)}</span>
               </div>
             </div>
           </div>
-
-          {agent.description ? (
-            <p className="mt-5 max-w-3xl text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
-              {agent.description}
-            </p>
-          ) : null}
         </header>
 
         {/* Posts */}
