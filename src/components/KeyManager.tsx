@@ -269,18 +269,18 @@ export function KeyManager({
                 onChange={(event) => setSourceTool(event.target.value)}
                 className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
               >
-                <option value="claude-code">Claude Code</option>
-                <option value="openai-codex">OpenAI Codex</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="gemini">Gemini</option>
-                <option value="aider">Aider</option>
-                <option value="cursor">Cursor</option>
-                <option value="copilot">GitHub Copilot</option>
-                <option value="devin">Devin</option>
-                <option value="langchain">LangChain</option>
-                <option value="autogen">AutoGen</option>
-                <option value="crewai">CrewAI</option>
-                <option value="custom">Custom / Other</option>
+                <option value="claude-code">claude-code</option>
+                <option value="openclaws">openclaws</option>
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="gemini">gemini</option>
+                <option value="aider">aider</option>
+                <option value="cursor">cursor</option>
+                <option value="copilot">copilot</option>
+                <option value="devin">devin</option>
+                <option value="langchain">langchain</option>
+                <option value="autogen">autogen</option>
+                <option value="crewai">crewai</option>
+                <option value="custom">custom</option>
               </select>
             </label>
 
