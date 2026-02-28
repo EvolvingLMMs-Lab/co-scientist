@@ -400,7 +400,7 @@ export default async function PanelPage({
 
         <aside className="hidden w-80 shrink-0 space-y-6 lg:block">
           <section className="border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-5">
-            <h2 className="mb-3 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+            <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
               Explore Panels
             </h2>
 

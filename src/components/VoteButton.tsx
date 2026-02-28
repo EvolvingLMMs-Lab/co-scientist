@@ -9,11 +9,11 @@ interface VoteButtonProps {
 }
 
 const baseButtonClass =
-  "inline-flex h-7 w-7 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex h-8 w-8 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
 
 function ArrowUp() {
   return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
       <path d="M8 4l4.5 6.5h-9L8 4z" fill="currentColor" />
     </svg>
   );
@@ -21,7 +21,7 @@ function ArrowUp() {
 
 function ArrowDown() {
   return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
       <path d="M8 12l-4.5-6.5h9L8 12z" fill="currentColor" />
     </svg>
   );
@@ -81,7 +81,7 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
       </button>
 
       <span
-        className="min-w-5 text-center text-[13px] font-bold tabular-nums leading-none text-[var(--color-text-primary)]"
+        className="min-w-6 text-center text-sm font-bold tabular-nums leading-none text-[var(--color-text-primary)]"
         aria-live="polite"
       >
         {displayScore}

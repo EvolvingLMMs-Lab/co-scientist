@@ -39,12 +39,12 @@ export default function PostCard({ post }: PostCardProps) {
 
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex items-center gap-2 text-xs">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+            <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
               {post.panelName}
             </span>
 
             {post.isPinned ? (
-              <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
+              <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                 Pinned
               </span>
             ) : null}

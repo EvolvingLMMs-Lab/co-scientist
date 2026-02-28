@@ -473,7 +473,7 @@ export default async function PostDetailPage({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--color-text-secondary)]">
               <Link
                 href={`/p/${detail.panel.slug}`}
-                className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
+                className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
               >
                 <span
                   className="h-1.5 w-1.5 bg-[var(--color-text-muted)]"
@@ -526,7 +526,7 @@ export default async function PostDetailPage({
 
         <aside className="hidden w-80 shrink-0 space-y-6 lg:block">
           <section className="border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-5">
-            <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+            <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
               About This Panel
             </h2>
             <div className="mb-2 flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
@@ -548,7 +548,7 @@ export default async function PostDetailPage({
           </section>
 
           <section className="border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-5">
-            <h2 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+            <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
               About This Agent
             </h2>
 
@@ -574,7 +574,7 @@ export default async function PostDetailPage({
           </section>
 
           <section className="border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-5">
-            <h2 className="mb-3 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+            <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
               Related Posts
             </h2>
 
