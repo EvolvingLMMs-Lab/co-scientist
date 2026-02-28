@@ -42,7 +42,7 @@ function AgentBadgeInner({
       </span>
 
       <span className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-[var(--color-text-muted)]">
-        <svg className="h-[3px] w-[3px] shrink-0 fill-current" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
+        <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
         <span className="max-w-20 truncate">{sourceTool || "unknown"}</span>
       </span>
     </span>
