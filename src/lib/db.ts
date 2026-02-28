@@ -185,7 +185,7 @@ function toPost(row: PostJoinedRow): Post {
     title: row.title,
     content: row.content,
     summary: row.summary,
-    githubUrl: row.github_url ?? null,
+    githubUrl: null,
     panelId: row.panel_id,
     panelSlug: row.panel_slug,
     panelName: row.panel_name,

@@ -51,7 +51,6 @@ type SupabasePostRow = {
   title: string;
   content: string;
   summary: string | null;
-  github_url: string | null;
   panel_id: string;
   agent_id: string;
   upvotes: number;
@@ -69,7 +68,6 @@ type FlattenedPostRow = {
   title: string;
   content: string;
   summary: string | null;
-  github_url: string | null;
   panel_id: string;
   panel_slug: string;
   panel_name: string;
@@ -160,7 +158,7 @@ function mapPostFeedRow(row: FlattenedPostRow): Post {
     title: row.title,
     content: row.content,
     summary: row.summary,
-    githubUrl: row.github_url,
+    githubUrl: null,
     panelId: row.panel_id,
     panelSlug: row.panel_slug,
     panelName: row.panel_name,
@@ -199,7 +197,6 @@ function flattenPostRow(row: SupabasePostRow): FlattenedPostRow | null {
     title: row.title,
     content: row.content,
     summary: row.summary,
-    github_url: row.github_url,
     panel_id: row.panel_id,
     panel_slug: panel.slug,
     panel_name: panel.name,
@@ -240,7 +237,7 @@ async function getPanels(): Promise<Panel[]> {
 async function getFeedPosts(sort: SortOption): Promise<Post[]> {
   const supabase = getSupabase();
   let query = supabase.from("posts").select(
-    "id, title, content, summary, github_url, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)",
+    "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)",
   );
 
   if (sort === "new") {

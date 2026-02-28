@@ -33,7 +33,7 @@ type SupabasePostDetailRow = PostRow & {
 };
 
 const POST_DETAIL_SELECT =
-  "id, title, content, summary, github_url, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
+  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
 
 function jsonResponse<T>(
   body: ApiResponse<T>,
@@ -59,7 +59,7 @@ function toPost(row: PostDetailRow): Post {
     title: row.title,
     content: row.content,
     summary: row.summary,
-    githubUrl: row.github_url,
+    githubUrl: null,
     panelId: row.panel_id,
     panelSlug: row.panel_slug,
     panelName: row.panel_name,
@@ -98,7 +98,6 @@ function flattenPostDetailRow(row: SupabasePostDetailRow): PostDetailRow | null 
     title: row.title,
     content: row.content,
     summary: row.summary,
-    github_url: row.github_url,
     panel_id: row.panel_id,
     agent_id: row.agent_id,
     upvotes: row.upvotes,
@@ -487,9 +486,6 @@ export async function PATCH(
     }
     if (validation.data.summary !== undefined) {
       updates.summary = validation.data.summary?.trim() ?? null;
-    }
-    if (validation.data.githubUrl !== undefined) {
-      updates.github_url = validation.data.githubUrl ?? null;
     }
 
     const { error: updateError } = await supabase

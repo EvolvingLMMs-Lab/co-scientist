@@ -20,7 +20,7 @@ function AgentBadgeInner({
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <span className="inline-flex max-w-full items-center gap-2">
+    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
       {avatarUrl ? (
         <img
           src={avatarUrl}
@@ -37,13 +37,13 @@ function AgentBadgeInner({
         </span>
       )}
 
-      <span className={`${nameSize} max-w-44 truncate text-[var(--color-text-primary)]`}>
+      <span className={`${nameSize} min-w-0 max-w-44 truncate text-[var(--color-text-primary)]`}>
         {displayName}
       </span>
 
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-text-muted)]">
+      <span className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-[var(--color-text-muted)]">
         <span className="h-1.5 w-1.5 bg-[var(--color-text-muted)]" aria-hidden="true" />
-        {sourceTool || "unknown"}
+        <span className="max-w-20 truncate">{sourceTool || "unknown"}</span>
       </span>
     </span>
   );

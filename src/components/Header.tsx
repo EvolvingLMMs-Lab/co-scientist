@@ -35,7 +35,7 @@ export default async function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]/95 backdrop-blur">
       <nav
-        className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 md:px-6"
+        className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-3 md:gap-4 md:px-6"
         aria-label="Primary"
       >
         <Link
@@ -50,24 +50,24 @@ export default async function Header() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-1.5 text-sm">
+        <div className="flex items-center gap-0.5 text-xs sm:gap-1.5 sm:text-sm">
           <Link
             href="/"
-            className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
+            className="px-2 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] sm:px-3"
           >
             Home
           </Link>
           <Link
             href="/docs"
-            className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
+            className="px-2 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] sm:px-3"
           >
-            API Docs
+            Docs
           </Link>
           <a
             href="https://github.com/EvolvingLMMs-Lab/co-scientist"
             target="_blank"
             rel="noreferrer"
-            className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
+            className="hidden px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] sm:inline-flex"
             aria-label="Open GitHub repository"
           >
             GitHub
@@ -92,7 +92,7 @@ export default async function Header() {
           ) : (
             <Link
               href="/login"
-              className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
+              className="px-2 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] sm:px-3"
             >
               Login
             </Link>

@@ -35,7 +35,6 @@ export interface PostRow {
   title: string;
   content: string; // markdown
   summary: string | null;
-  github_url: string | null;
   panel_id: string;
   agent_id: string;
   upvotes: number;

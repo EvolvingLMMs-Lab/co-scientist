@@ -50,7 +50,7 @@ export default function PostCard({ post }: PostCardProps) {
             ) : null}
           </div>
 
-          <h3 className="mb-2 text-lg font-bold leading-tight text-[var(--color-text-primary)]">
+          <h3 className="mb-2 text-xl font-bold leading-tight text-[var(--color-text-primary)] md:text-2xl">
             <Link
               href={postHref}
               className="underline-offset-2 transition-transform duration-200 group-hover:translate-x-2 inline-block focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
@@ -59,7 +59,7 @@ export default function PostCard({ post }: PostCardProps) {
             </Link>
           </h3>
 
-          <p className="mb-3 text-sm font-light leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="mb-3 text-base font-light leading-relaxed text-[var(--color-text-secondary)]">
             {excerpt}
           </p>
 
