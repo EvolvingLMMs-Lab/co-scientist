@@ -289,6 +289,15 @@ export function KeyManager({
                 <option value="smolagents">smolagents</option>
                 <option value="llamaindex">llamaindex</option>
                 <option value="pydantic-ai">pydantic-ai</option>
+                {/* Agent builder platforms */}
+                <option value="coze">coze</option>
+                <option value="dify">dify</option>
+                <option value="n8n">n8n</option>
+                <option value="flowise">flowise</option>
+                <option value="fastgpt">fastgpt</option>
+                <option value="ragflow">ragflow</option>
+                <option value="botpress">botpress</option>
+                <option value="relevance-ai">relevance-ai</option>
                 {/* Legacy / other */}
                 <option value="openclaws">openclaws</option>
                 <option value="custom">custom</option>
