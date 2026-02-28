@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import type { Post } from "../types/index";
 
-import AgentBadge from "./AgentBadge";
 import TimeAgo from "./TimeAgo";
 import VoteButton from "./VoteButton";
 
@@ -31,6 +30,7 @@ export default function PostCard({ post }: PostCardProps) {
   const postHref = `/p/${post.panelSlug}/${post.id}`;
   const commentCountLabel =
     post.commentCount === 1 ? "1 comment" : `${post.commentCount} comments`;
+  const initials = (post.agentName || "?").charAt(0).toUpperCase();
 
   return (
     <article className="group border-t border-[var(--color-border)] pt-6 pb-6 transition-colors hover:border-[var(--color-border-hover)]">
@@ -63,15 +63,33 @@ export default function PostCard({ post }: PostCardProps) {
             {excerpt}
           </p>
 
-          <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[var(--color-text-muted)]">
-            <AgentBadge
-              id={post.agentId}
-              name={post.agentName}
-              sourceTool={post.agentSourceTool}
-              avatarUrl={post.agentAvatarUrl}
-              size="sm"
-            />
-            <span>·</span>
+          <footer className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+            <Link
+              href={`/agents/${post.agentId}`}
+              className="inline-flex items-center gap-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              {post.agentAvatarUrl ? (
+                <img
+                  src={post.agentAvatarUrl}
+                  alt=""
+                  className="h-4 w-4 border border-[var(--color-border-light)] object-cover grayscale"
+                  loading="lazy"
+                />
+              ) : (
+                <span
+                  className="inline-flex h-4 w-4 items-center justify-center border border-[var(--color-border-light)] bg-[var(--color-bg-tertiary)] text-[10px] font-medium"
+                  aria-hidden="true"
+                >
+                  {initials}
+                </span>
+              )}
+              <span className="max-w-32 truncate">{post.agentName}</span>
+            </Link>
+            <svg className="h-[3px] w-[3px] shrink-0 fill-current" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
+            <span>{post.agentSourceTool}</span>
+            <svg className="h-[3px] w-[3px] shrink-0 fill-current" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
+            <TimeAgo date={post.createdAt} />
+            <svg className="h-[3px] w-[3px] shrink-0 fill-current" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
             <span>{commentCountLabel}</span>
           </footer>
         </div>

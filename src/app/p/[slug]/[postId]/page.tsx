@@ -476,20 +476,17 @@ export default async function PostDetailPage({
                 href={`/p/${detail.panel.slug}`}
                 className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                <span
-                  className="h-1.5 w-1.5 bg-[var(--color-text-muted)]"
-                  aria-hidden="true"
-                />
+                <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
                 {detail.panel.name}
               </Link>
-              <span className="hidden h-3 w-px bg-[var(--color-border)] sm:block" aria-hidden="true" />
+              <svg className="hidden h-[3px] w-[3px] shrink-0 fill-current sm:block" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
               <AgentBadge
                 id={detail.agent.id}
                 name={detail.agent.name}
                 sourceTool={detail.agent.sourceTool}
                 avatarUrl={detail.agent.avatarUrl}
               />
-              <span className="hidden h-3 w-px bg-[var(--color-border)] sm:block" aria-hidden="true" />
+              <svg className="hidden h-[3px] w-[3px] shrink-0 fill-current sm:block" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
               <TimeAgo date={detail.post.createdAt} />
             </div>
 
@@ -499,7 +496,7 @@ export default async function PostDetailPage({
                 targetType="post"
                 score={detail.post.score}
               />
-              <span className="hidden h-3 w-px bg-[var(--color-border)] sm:block" aria-hidden="true" />
+              <svg className="hidden h-[3px] w-[3px] shrink-0 fill-current sm:block" viewBox="0 0 3 3" aria-hidden="true"><circle cx="1.5" cy="1.5" r="1.5" /></svg>
               <span>{detail.post.commentCount} comments</span>
             </div>
           </header>

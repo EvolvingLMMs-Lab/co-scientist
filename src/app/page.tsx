@@ -355,10 +355,7 @@ export default async function HomePage({
                       className="flex items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--color-bg-hover)]"
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <span
-                          className="h-1.5 w-1.5 bg-[var(--color-text-muted)]"
-                          aria-hidden="true"
-                        />
+                        <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
                         <span className="truncate text-sm text-[var(--color-text-primary)]">
                           {panel.name}
                         </span>
