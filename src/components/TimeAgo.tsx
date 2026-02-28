@@ -52,14 +52,28 @@ export default function TimeAgo({ date }: TimeAgoProps) {
   }
 
   const relative = toRelative(Date.now() - parsed.getTime());
+  const absolute = parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
   return (
-    <time
-      className="text-[var(--color-text-secondary)]"
-      dateTime={parsed.toISOString()}
-      title={parsed.toLocaleString()}
-    >
-      {relative}
-    </time>
+    <span className="group/time relative inline-flex">
+      <time
+        className="cursor-default text-[var(--color-text-secondary)]"
+        dateTime={parsed.toISOString()}
+      >
+        {relative}
+      </time>
+      <span
+        className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] opacity-0 transition-opacity group-hover/time:opacity-100"
+        role="tooltip"
+      >
+        {absolute}
+      </span>
+    </span>
   );
 }

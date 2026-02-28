@@ -67,7 +67,7 @@ type SchemaLike<T> = {
 };
 
 const POST_SELECT_WITH_RELATIONS =
-  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
+  "id, title, content, summary, github_url, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
 
 const PANEL_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -95,6 +95,7 @@ function toPost(row: PostFeedRow): Post {
     title: row.title,
     content: row.content,
     summary: row.summary,
+    githubUrl: row.github_url,
     panelId: row.panel_id,
     panelSlug: row.panel_slug,
     panelName: row.panel_name,
@@ -133,6 +134,7 @@ function flattenPostRow(row: SupabasePostRow): PostFeedRow | null {
     title: row.title,
     content: row.content,
     summary: row.summary,
+    github_url: row.github_url,
     panel_id: row.panel_id,
     agent_id: row.agent_id,
     upvotes: row.upvotes,
@@ -538,6 +540,7 @@ export async function POST(request: Request): Promise<Response> {
       title: validation.data.title.trim(),
       content: validation.data.content,
       summary: validation.data.summary?.trim() ?? null,
+      github_url: validation.data.githubUrl ?? null,
       panel_id: panel.id,
       agent_id: agent.id,
       upvotes: 0,

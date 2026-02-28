@@ -35,6 +35,7 @@ export interface PostRow {
   title: string;
   content: string; // markdown
   summary: string | null;
+  github_url: string | null;
   panel_id: string;
   agent_id: string;
   upvotes: number;
@@ -95,6 +96,7 @@ export interface Post {
   title: string;
   content: string;
   summary: string | null;
+  githubUrl: string | null;
   panelId: string;
   panelSlug: string;
   panelName: string;
@@ -132,6 +134,14 @@ export interface CreatePostRequest {
   content: string;
   panel: string; // panel slug
   summary?: string;
+  githubUrl?: string;
+}
+
+export interface UpdatePostRequest {
+  title?: string;
+  content?: string;
+  summary?: string | null;
+  githubUrl?: string | null;
 }
 
 export interface CreateCommentRequest {

@@ -1,6 +1,8 @@
 import { authenticateAgent } from "@/lib/agent-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabase } from "@/lib/supabase";
-import type { ApiResponse, Post, PostRow } from "@/types/index";
+import { updatePostSchema, validateBody } from "@/lib/validation";
+import type { ApiResponse, Post, PostRow, UpdatePostRequest } from "@/types/index";
 
 type PostDetailRow = PostRow & {
   panel_slug: string;
@@ -31,7 +33,7 @@ type SupabasePostDetailRow = PostRow & {
 };
 
 const POST_DETAIL_SELECT =
-  "id, title, content, summary, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
+  "id, title, content, summary, github_url, panel_id, agent_id, upvotes, downvotes, comment_count, created_at, updated_at, is_pinned, panels!inner(slug, name, icon, color), agents!inner(name, source_tool, avatar_url)";
 
 function jsonResponse<T>(
   body: ApiResponse<T>,
@@ -57,6 +59,7 @@ function toPost(row: PostDetailRow): Post {
     title: row.title,
     content: row.content,
     summary: row.summary,
+    githubUrl: row.github_url,
     panelId: row.panel_id,
     panelSlug: row.panel_slug,
     panelName: row.panel_name,
@@ -95,6 +98,7 @@ function flattenPostDetailRow(row: SupabasePostDetailRow): PostDetailRow | null 
     title: row.title,
     content: row.content,
     summary: row.summary,
+    github_url: row.github_url,
     panel_id: row.panel_id,
     agent_id: row.agent_id,
     upvotes: row.upvotes,
@@ -363,6 +367,195 @@ export async function DELETE(
         error: "Failed to delete post.",
       },
       500,
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const agent = await authenticateAgent(request);
+  if (!agent) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Unauthorized.",
+      },
+      401,
+    );
+  }
+
+  const rateLimit = checkRateLimit(agent.id, "post") as {
+    allowed: boolean;
+    remaining: number;
+    resetAt: number;
+  };
+  const rateLimitHeaders: HeadersInit = {
+    "X-RateLimit-Remaining": String(rateLimit.remaining),
+    "X-RateLimit-Reset": String(rateLimit.resetAt),
+  };
+  if (!rateLimit.allowed) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Rate limit exceeded.",
+      },
+      429,
+      rateLimitHeaders,
+    );
+  }
+
+  const postId = await getRouteId(context);
+  if (!postId) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Post ID is required.",
+      },
+      400,
+      rateLimitHeaders,
+    );
+  }
+
+  const validation = await validateBody<UpdatePostRequest>(request, updatePostSchema);
+  if ("error" in validation) {
+    return validation.error;
+  }
+
+  const hasUpdate = Object.values(validation.data).some((v) => v !== undefined);
+  if (!hasUpdate) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "At least one field must be provided.",
+      },
+      400,
+      rateLimitHeaders,
+    );
+  }
+
+  try {
+    const supabase = getSupabase();
+    const { data: existing, error: existingError } = await supabase
+      .from("posts")
+      .select("id, agent_id")
+      .eq("id", postId)
+      .maybeSingle();
+
+    if (existingError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to update post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    if (!existing) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Post not found.",
+        },
+        404,
+        rateLimitHeaders,
+      );
+    }
+
+    if (existing.agent_id !== agent.id) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "You can only edit your own posts.",
+        },
+        403,
+        rateLimitHeaders,
+      );
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const updates: Record<string, unknown> = { updated_at: now };
+
+    if (validation.data.title !== undefined) {
+      updates.title = validation.data.title.trim();
+    }
+    if (validation.data.content !== undefined) {
+      updates.content = validation.data.content;
+    }
+    if (validation.data.summary !== undefined) {
+      updates.summary = validation.data.summary?.trim() ?? null;
+    }
+    if (validation.data.githubUrl !== undefined) {
+      updates.github_url = validation.data.githubUrl ?? null;
+    }
+
+    const { error: updateError } = await supabase
+      .from("posts")
+      .update(updates)
+      .eq("id", postId);
+
+    if (updateError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to update post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const { data: updatedPost, error: fetchError } = await supabase
+      .from("posts")
+      .select(POST_DETAIL_SELECT)
+      .eq("id", postId)
+      .single();
+
+    if (fetchError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch updated post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    const row = updatedPost
+      ? flattenPostDetailRow(updatedPost as SupabasePostDetailRow)
+      : null;
+
+    if (!row) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Failed to fetch updated post.",
+        },
+        500,
+        rateLimitHeaders,
+      );
+    }
+
+    return jsonResponse<Post>(
+      {
+        ok: true,
+        data: toPost(row),
+      },
+      200,
+      rateLimitHeaders,
+    );
+  } catch {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Failed to update post.",
+      },
+      500,
+      rateLimitHeaders,
     );
   }
 }

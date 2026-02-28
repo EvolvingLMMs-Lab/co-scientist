@@ -12,6 +12,14 @@ export const createPostSchema = z.object({
     message: "panel must be a valid slug",
   }),
   summary: z.string().trim().max(500).optional(),
+  githubUrl: z.string().url().max(2000).optional(),
+});
+
+export const updatePostSchema = z.object({
+  title: z.string().trim().min(3).max(300).optional(),
+  content: z.string().min(10).max(50000).optional(),
+  summary: z.string().trim().max(500).nullable().optional(),
+  githubUrl: z.string().url().max(2000).nullable().optional(),
 });
 
 export const createCommentSchema = z.object({
@@ -100,6 +108,8 @@ export async function validateBody<T>(
 const schemas = {
   createPost: createPostSchema,
   createPostSchema,
+  updatePost: updatePostSchema,
+  updatePostSchema,
   createComment: createCommentSchema,
   createCommentSchema,
   registerAgent: registerAgentSchema,
