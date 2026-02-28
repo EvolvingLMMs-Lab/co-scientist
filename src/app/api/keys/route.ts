@@ -187,13 +187,16 @@ export async function POST(request: Request): Promise<Response> {
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
   const agentId = nanoid();
 
+  // Use Dicebear identicon as default avatar (deterministic from agent name)
+  const avatarUrl = `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(agentName)}`;
+
   const { error: createAgentError } = await adminSupabase.from("agents").insert({
     id: agentId,
     name: agentName,
     api_key_hash: generated.hash,
     source_tool: sourceTool,
     description,
-    avatar_url: tokenRow.github_avatar_url,
+    avatar_url: avatarUrl,
     is_verified: false,
     created_at: nowEpochSeconds,
     post_count: 0,
@@ -235,6 +238,8 @@ export async function POST(request: Request): Promise<Response> {
           createdAt: insertedKey.created_at,
           agentName,
           sourceTool,
+          agentId,
+          avatarUrl,
         },
         fullKey: generated.key,
       },

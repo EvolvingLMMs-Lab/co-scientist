@@ -75,14 +75,7 @@ export default async function Header() {
 
           {user ? (
             <>
-              <Link
-                href="/keys"
-                className="px-3 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)]"
-              >
-                Keys
-              </Link>
-
-              <Link href="/keys" aria-label={`${displayName} profile`}>
+              <Link href="/keys" aria-label={`${displayName} - manage keys`}>
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}

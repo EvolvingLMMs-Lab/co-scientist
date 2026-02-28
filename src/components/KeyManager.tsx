@@ -9,6 +9,8 @@ export type ManagedApiKey = {
   createdAt: string;
   agentName: string;
   sourceTool: string;
+  agentId?: string;
+  avatarUrl?: string;
 };
 
 interface KeyManagerProps {
@@ -68,9 +70,10 @@ export function KeyManager({
   const [starredRepos, setStarredRepos] = useState(initialStarredRepos);
   const [label, setLabel] = useState("");
   const [agentName, setAgentName] = useState("");
-  const [sourceTool, setSourceTool] = useState("github-user");
+  const [sourceTool, setSourceTool] = useState("claude-code");
   const [description, setDescription] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [createdAgent, setCreatedAgent] = useState<{ id: string; name: string; avatarUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isRefreshingStars, setIsRefreshingStars] = useState(false);
@@ -156,9 +159,14 @@ export function KeyManager({
 
       setKeys((current) => [createData.key, ...current]);
       setCreatedKey(createData.fullKey);
+      setCreatedAgent(
+        createData.key.agentId && createData.key.avatarUrl
+          ? { id: createData.key.agentId, name: createData.key.agentName, avatarUrl: createData.key.avatarUrl }
+          : null,
+      );
       setLabel("");
       setAgentName("");
-      setSourceTool("github-user");
+      setSourceTool("claude-code");
       setDescription("");
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Failed to create API key.");
@@ -256,12 +264,24 @@ export function KeyManager({
 
             <label className="block text-sm font-medium text-[var(--color-text-primary)]">
               Source tool
-              <input
+              <select
                 value={sourceTool}
                 onChange={(event) => setSourceTool(event.target.value)}
-                placeholder="github-user"
                 className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
-              />
+              >
+                <option value="claude-code">Claude Code</option>
+                <option value="openai-codex">OpenAI Codex</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gemini">Gemini</option>
+                <option value="aider">Aider</option>
+                <option value="cursor">Cursor</option>
+                <option value="copilot">GitHub Copilot</option>
+                <option value="devin">Devin</option>
+                <option value="langchain">LangChain</option>
+                <option value="autogen">AutoGen</option>
+                <option value="crewai">CrewAI</option>
+                <option value="custom">Custom / Other</option>
+              </select>
             </label>
 
             <label className="block text-sm font-medium text-[var(--color-text-primary)]">
@@ -291,8 +311,8 @@ export function KeyManager({
         )}
 
         {createdKey ? (
-          <div className="mt-5 border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+          <div className="mt-5 border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-4 space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
               Save this key now. It is shown only once.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -309,6 +329,25 @@ export function KeyManager({
                 {copied ? "Copied!" : "Copy"}
               </button>
             </div>
+
+            {createdAgent ? (
+              <div className="flex items-center gap-3 border-t border-[var(--color-border)] pt-3">
+                <img
+                  src={createdAgent.avatarUrl}
+                  alt={`${createdAgent.name} avatar`}
+                  className="h-8 w-8 border border-[var(--color-border)] object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">{createdAgent.name}</p>
+                  <a
+                    href={`/agents/${createdAgent.id}`}
+                    className="text-xs text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
+                  >
+                    View agent profile
+                  </a>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
