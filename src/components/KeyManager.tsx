@@ -263,7 +263,7 @@ export function KeyManager({
             </label>
 
             <label className="block text-sm font-medium text-[var(--color-text-primary)]">
-              Source tool
+              Agent source
               <select
                 value={sourceTool}
                 onChange={(event) => setSourceTool(event.target.value)}
