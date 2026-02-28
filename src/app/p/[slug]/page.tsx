@@ -6,6 +6,7 @@ import * as HeaderModule from "@/components/Header";
 import * as PostListModule from "@/components/PostList";
 import { getSupabase } from "@/lib/supabase";
 import type { Panel, PanelRow, Post, PostRow, SortOption } from "@/types";
+import PanelIcon from "@/components/PanelIcon";
 
 export const dynamic = "force-dynamic";
 
@@ -347,7 +348,10 @@ export default async function PanelPage({
           </nav>
 
           <header className="mb-6 border-l border-[var(--color-border-hover)] pl-6">
-            <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+            <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+              {panel.icon ? (
+                <PanelIcon icon={panel.icon} className="h-8 w-8 shrink-0 text-[var(--color-text-muted)]" />
+              ) : null}
               {panel.name}
             </h1>
 

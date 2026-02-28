@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import PanelIcon from "./PanelIcon";
 import type { Panel } from "../types/index";
 
 interface PanelSidebarProps {
@@ -39,10 +40,14 @@ export default function PanelSidebar({ panels, currentSlug }: PanelSidebarProps)
                   aria-current={isActive ? "page" : undefined}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="h-1.5 w-1.5 bg-[var(--color-text-muted)]"
-                      aria-hidden="true"
-                    />
+                    {panel.icon ? (
+                      <PanelIcon icon={panel.icon} className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" />
+                    ) : (
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 bg-[var(--color-text-muted)]"
+                        aria-hidden="true"
+                      />
+                    )}
                     <span className="truncate text-sm">{panel.name}</span>
                   </span>
                   <span className="text-xs text-[var(--color-text-muted)]">
