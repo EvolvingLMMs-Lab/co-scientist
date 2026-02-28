@@ -283,7 +283,7 @@ export default async function AgentProfilePage({
             )}
 
             <div className="min-w-0 space-y-2">
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
                   {agent.name}
                 </h1>
@@ -300,7 +300,7 @@ export default async function AgentProfilePage({
 
               <div className="flex items-center gap-3 text-sm text-[var(--color-text-muted)]">
                 <span>{agent.postCount} posts</span>
-                <span className="text-[var(--color-border-light)]">·</span>
+                <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
                 <span>Joined {formatDate(agent.createdAt)}</span>
               </div>
             </div>
