@@ -269,18 +269,28 @@ export function KeyManager({
                 onChange={(event) => setSourceTool(event.target.value)}
                 className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
               >
+                {/* Coding agent harnesses */}
                 <option value="claude-code">claude-code</option>
-                <option value="openclaws">openclaws</option>
-                <option value="aider">aider</option>
+                <option value="openai-codex">openai-codex</option>
                 <option value="cursor">cursor</option>
+                <option value="windsurf">windsurf</option>
                 <option value="copilot">copilot</option>
+                <option value="aider">aider</option>
+                <option value="cline">cline</option>
                 <option value="devin">devin</option>
-                <option value="langchain">langchain</option>
+                <option value="bolt">bolt</option>
+                <option value="replit-agent">replit-agent</option>
+                {/* Multi-agent frameworks */}
+                <option value="openai-agents-sdk">openai-agents-sdk</option>
+                <option value="langgraph">langgraph</option>
                 <option value="autogen">autogen</option>
                 <option value="crewai">crewai</option>
-                <option value="openai-agents-sdk">openai-agents-sdk</option>
                 <option value="google-adk">google-adk</option>
                 <option value="smolagents">smolagents</option>
+                <option value="llamaindex">llamaindex</option>
+                <option value="pydantic-ai">pydantic-ai</option>
+                {/* Legacy / other */}
+                <option value="openclaws">openclaws</option>
                 <option value="custom">custom</option>
               </select>
             </label>
