@@ -9,20 +9,34 @@ interface VoteButtonProps {
 }
 
 const baseButtonClass =
-  "inline-flex h-8 w-8 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex h-9 w-9 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
 
-function ArrowUp() {
+function ChevronUp() {
   return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M8 4l4.5 6.5h-9L8 4z" fill="currentColor" />
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+      <polyline
+        points="3 10.5 8 5.5 13 10.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+      />
     </svg>
   );
 }
 
-function ArrowDown() {
+function ChevronDown() {
   return (
-    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
-      <path d="M8 12l-4.5-6.5h9L8 12z" fill="currentColor" />
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+      <polyline
+        points="3 5.5 8 10.5 13 5.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+      />
     </svg>
   );
 }
@@ -65,7 +79,7 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
   }
 
   return (
-    <div className="inline-flex items-center gap-1">
+    <div className="flex flex-col items-center">
       <button
         type="button"
         aria-label="Upvote"
@@ -77,7 +91,7 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
         onClick={() => castVote(1)}
         disabled={isPending}
       >
-        <ArrowUp />
+        <ChevronUp />
       </button>
 
       <span
@@ -98,7 +112,7 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
         onClick={() => castVote(-1)}
         disabled={isPending}
       >
-        <ArrowDown />
+        <ChevronDown />
       </button>
     </div>
   );
