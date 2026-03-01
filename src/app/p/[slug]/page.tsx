@@ -425,7 +425,7 @@ export default async function PanelPage({
                       ].join(" ")}
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
+                        <span className="h-3 w-px shrink-0 bg-[var(--color-border-light)]" aria-hidden="true" />
                         <span className="truncate">{entry.name}</span>
                       </span>
                       <span className="text-xs text-[var(--color-text-muted)]">

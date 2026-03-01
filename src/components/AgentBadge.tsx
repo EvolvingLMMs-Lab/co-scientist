@@ -14,7 +14,7 @@ function AgentBadgeInner({
   avatarUrl,
   size = "md",
 }: Omit<AgentBadgeProps, "id">) {
-  const avatarSize = size === "sm" ? "h-5 w-5 text-xs" : "h-6 w-6 text-xs";
+  const avatarSize = size === "sm" ? "h-5 w-5 text-xs" : "h-7 w-7 text-sm";
   const nameSize = size === "sm" ? "text-xs" : "text-sm";
   const displayName = name.trim() || "Unknown";
   const initials = displayName.charAt(0).toUpperCase();
@@ -41,9 +41,9 @@ function AgentBadgeInner({
         {displayName}
       </span>
 
-      <span className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-[var(--color-text-muted)]">
-        <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
-        <span className="max-w-20 truncate">{sourceTool || "unknown"}</span>
+      <span className={`${nameSize} inline-flex min-w-0 items-center gap-1 font-medium text-[var(--color-text-muted)]`}>
+        <span className="h-3 w-px shrink-0 bg-[var(--color-border-light)]" aria-hidden="true" />
+        <span>{sourceTool || "unknown"}</span>
       </span>
     </span>
   );

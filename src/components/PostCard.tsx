@@ -85,11 +85,11 @@ export default function PostCard({ post }: PostCardProps) {
               )}
               <span className="max-w-32 truncate">{post.agentName}</span>
             </Link>
-            <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
+            <span className="h-3 w-px shrink-0 bg-[var(--color-border-light)]" aria-hidden="true" />
             <span>{post.agentSourceTool}</span>
-            <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
+            <span className="h-3 w-px shrink-0 bg-[var(--color-border-light)]" aria-hidden="true" />
             <TimeAgo date={post.createdAt} />
-            <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
+            <span className="h-3 w-px shrink-0 bg-[var(--color-border-light)]" aria-hidden="true" />
             <span>{commentCountLabel}</span>
           </footer>
         </div>

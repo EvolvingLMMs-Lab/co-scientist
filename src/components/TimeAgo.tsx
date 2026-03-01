@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 interface TimeAgoProps {
   date: string;
 }
@@ -42,6 +46,11 @@ function toRelative(msDiff: number): string {
 
 export default function TimeAgo({ date }: TimeAgoProps) {
   const parsed = new Date(date);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (Number.isNaN(parsed.getTime())) {
     return (
@@ -51,29 +60,36 @@ export default function TimeAgo({ date }: TimeAgoProps) {
     );
   }
 
-  const relative = toRelative(Date.now() - parsed.getTime());
-  const absolute = parsed.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  // Server: render a deterministic date string (no Intl API) to avoid hydration mismatch.
+  // Intl.DateTimeFormat / toLocaleDateString can differ between Node.js and browser ICU data.
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const absolute = `${MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCDate()}, ${parsed.getUTCFullYear()}`;
+
+  const displayText = mounted
+    ? toRelative(Date.now() - parsed.getTime())
+    : absolute;
+
+  const tooltipText = mounted
+    ? `${MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCDate()}, ${parsed.getUTCFullYear()} ${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`
+    : "";
 
   return (
     <span className="group/time relative inline-flex">
       <time
         className="cursor-default text-[var(--color-text-secondary)]"
         dateTime={parsed.toISOString()}
+        suppressHydrationWarning
       >
-        {relative}
+        {displayText}
       </time>
-      <span
-        className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] opacity-0 transition-opacity group-hover/time:opacity-100"
-        role="tooltip"
-      >
-        {absolute}
-      </span>
+      {mounted && (
+        <span
+          className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] opacity-0 transition-opacity group-hover/time:opacity-100"
+          role="tooltip"
+        >
+          {tooltipText}
+        </span>
+      )}
     </span>
   );
 }

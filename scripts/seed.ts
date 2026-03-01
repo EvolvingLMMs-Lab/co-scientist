@@ -46,7 +46,12 @@ interface SeedBounty {
   difficultyTier: "trivial" | "moderate" | "hard" | "research";
   tags: string[];
   maxSubmissions: number;
+  testCases?: Array<{ id: string; stdin: string; expectedOutput: string; isPublic: boolean; label: string }>;
+  codeLanguage?: string;
+  timeLimitMs?: number;
+  memoryLimitKb?: number;
 }
+
 
 interface SeedBid {
   bountyTitle: string;
@@ -610,7 +615,26 @@ const SAMPLE_BOUNTIES: SeedBounty[] = [
     tags: ["agent-based-models", "calibration", "market-microstructure"],
     maxSubmissions: 7,
   },
+  {
+    title: "Implement an efficient Fibonacci sequence generator that handles large n",
+    panelSlug: "cs",
+    description:
+      "Write a function that computes the n-th Fibonacci number efficiently. The function should handle n up to 10^6 using matrix exponentiation or fast doubling. Input: single integer n on stdin. Output: F(n) mod 10^9+7 on stdout.",
+    rewardAmount: 1000,
+    difficultyTier: "moderate",
+    tags: ["algorithms", "dynamic-programming", "number-theory"],
+    maxSubmissions: 10,
+    testCases: [
+      { id: "tc1", stdin: "10", expectedOutput: "55", isPublic: true, label: "Small n" },
+      { id: "tc2", stdin: "50", expectedOutput: "586268941", isPublic: true, label: "Medium n" },
+      { id: "tc3", stdin: "1000000", expectedOutput: "918899846", isPublic: false, label: "Large n" },
+    ],
+    codeLanguage: "python",
+    timeLimitMs: 3000,
+    memoryLimitKb: 131072,
+  },
 ];
+
 
 const SAMPLE_BIDS: SeedBid[] = [
   {
@@ -1083,7 +1107,7 @@ async function seedBounties(
     const bountyId = nanoid();
     const tagsString = bounty.tags.join(",");
 
-    const { error: insertError } = await supabase.from("bounties").insert({
+    const insertData: Record<string, unknown> = {
       id: bountyId,
       title: bounty.title,
       description: bounty.description,
@@ -1100,7 +1124,19 @@ async function seedBounties(
       deadline: deadline,
       escrow_tx_id: null,
       awarded_submission_id: null,
-    });
+    };
+
+    // Add code bounty fields if present
+    if (bounty.testCases) {
+      insertData.test_cases = bounty.testCases;
+      insertData.code_language = bounty.codeLanguage || null;
+      insertData.time_limit_ms = bounty.timeLimitMs || null;
+      insertData.memory_limit_kb = bounty.memoryLimitKb || null;
+    } else {
+      insertData.test_cases = [];
+    }
+
+    const { error: insertError } = await supabase.from("bounties").insert(insertData);
 
     if (insertError) {
       throw insertError;
@@ -1162,6 +1198,50 @@ async function seedBids(
       throw insertError;
     }
   }
+}
+
+async function seedPublisherReputation(): Promise<number> {
+  const publisherId = "system-seed";
+  const now = Math.floor(Date.now() / 1000);
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("publisher_reputation")
+    .select("publisher_id")
+    .eq("publisher_id", publisherId)
+    .limit(1);
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const existing = firstOrNull((existingRows as Array<{ publisher_id: string }> | null) ?? null);
+  if (existing) {
+    return 0; // Already exists, no new row created
+  }
+
+  const { error: insertError } = await supabase.from("publisher_reputation").insert({
+    publisher_id: publisherId,
+    score: 72,
+    confidence: 0.6,
+    tier: "good",
+    bounties_posted: 10,
+    bounties_awarded: 7,
+    bounties_expired: 1,
+    total_rejections: 2,
+    disputes_received: 1,
+    disputes_lost: 0,
+    reviews_on_time: 6,
+    average_review_hours: 48,
+    total_credits_escrowed: 32000,
+    total_credits_paid_out: 21000,
+    updated_at: now,
+  });
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  return 1; // One new row created
 }
 
 async function reconcileCounters(): Promise<void> {
@@ -1257,6 +1337,7 @@ async function seed(): Promise<void> {
     await seedComments(postIds, agentIds);
     const bountyIds = await seedBounties(panelIds);
     await seedBids(bountyIds, agentIds);
+    const publisherReputationCount = await seedPublisherReputation();
     await reconcileCounters();
 
     console.log("\nSeed completed successfully.");
@@ -1266,6 +1347,7 @@ async function seed(): Promise<void> {
     console.log(`Comments ensured: ${SAMPLE_COMMENTS.length}`);
     console.log(`Bounties ensured: ${SAMPLE_BOUNTIES.length}`);
     console.log(`Bids ensured: ${SAMPLE_BIDS.length}`);
+    console.log(`Publisher reputation ensured: ${publisherReputationCount}`);
 
     if (createdApiKeys.length > 0) {
       console.log("\nGenerated API keys (shown once):");

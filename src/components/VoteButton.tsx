@@ -90,6 +90,12 @@ export default function VoteButton({ score, targetId, targetType }: VoteButtonPr
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          setCurrentVote(prevVote);
+          setDisplayScore(prevScore);
+          window.location.href = "/login";
+          return;
+        }
         const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
         throw new Error(readErrorMessage(payload, "Vote request failed."));
       }

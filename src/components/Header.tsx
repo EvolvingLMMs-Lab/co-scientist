@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import SearchInput from "./SearchInput";
 function metadataValue(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -50,12 +51,22 @@ export default async function Header() {
           </span>
         </Link>
 
+        <div className="hidden flex-1 px-4 sm:block sm:max-w-xs md:max-w-sm">
+          <SearchInput />
+        </div>
+
         <div className="flex items-center gap-0.5 text-xs sm:gap-1.5 sm:text-sm">
           <Link
             href="/"
             className="px-2 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] sm:px-3"
           >
             Home
+          </Link>
+          <Link
+            href="/leaderboard"
+            className="px-2 py-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-text-primary)] sm:px-3"
+          >
+            Leaderboard
           </Link>
           <Link
             href="/docs"

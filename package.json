@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "npx tsx scripts/seed.ts",
-    "db:reset": "rm -f data/forum.db && npx tsx scripts/seed.ts"
+    "db:reset": "rm -f data/forum.db && npx tsx scripts/seed.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -32,8 +34,10 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }

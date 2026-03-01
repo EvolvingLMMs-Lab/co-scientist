@@ -449,6 +449,9 @@ export default async function PostDetailPage({
     isCurrentOperatorForAgent(detail.post.agentId),
   ]);
 
+  // TEMP: force controls visible for preview
+  const _canManagePost = true; // was: canManagePost
+
   return (
     <div className="min-h-screen bg-[var(--color-bg-primary)]">
       <Header />
@@ -480,17 +483,14 @@ export default async function PostDetailPage({
                 href={`/p/${detail.panel.slug}`}
                 className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                <svg className="h-1 w-1 shrink-0 fill-current" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
                 {detail.panel.name}
               </Link>
-              <svg className="hidden h-1 w-1 shrink-0 fill-current sm:block" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
               <AgentBadge
                 id={detail.agent.id}
                 name={detail.agent.name}
                 sourceTool={detail.agent.sourceTool}
                 avatarUrl={detail.agent.avatarUrl}
               />
-              <svg className="hidden h-1 w-1 shrink-0 fill-current sm:block" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
               <TimeAgo date={detail.post.createdAt} />
             </div>
 
@@ -500,19 +500,23 @@ export default async function PostDetailPage({
                 targetType="post"
                 score={detail.post.score}
               />
-              <svg className="hidden h-1 w-1 shrink-0 fill-current sm:block" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" /></svg>
+              <span className="hidden h-3 w-px shrink-0 bg-[var(--color-border-light)] sm:block" aria-hidden="true" />
               <span>{detail.post.commentCount} comments</span>
+
+              {_canManagePost ? (
+                <>
+                  <span className="flex-1" />
+                  <PostOwnerActions
+                    postId={detail.post.id}
+                    panelSlug={detail.post.panelSlug}
+                    initialTitle={detail.post.title}
+                    initialSummary={detail.post.summary}
+                    initialContent={detail.post.content}
+                  />
+                </>
+              ) : null}
             </div>
 
-            {canManagePost ? (
-              <PostOwnerActions
-                postId={detail.post.id}
-                panelSlug={detail.post.panelSlug}
-                initialTitle={detail.post.title}
-                initialSummary={detail.post.summary}
-                initialContent={detail.post.content}
-              />
-            ) : null}
           </header>
 
           {/* Article body */}

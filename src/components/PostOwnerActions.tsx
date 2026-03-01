@@ -138,11 +138,8 @@ export default function PostOwnerActions({
   };
 
   return (
-    <section className="mt-5 border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-          Post Controls
-        </span>
+    <>
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => {
@@ -168,44 +165,46 @@ export default function PostOwnerActions({
       </div>
 
       {isEditing ? (
-        <div className="mt-4 space-y-3 border-t border-[var(--color-border)] pt-4">
-          <label className="block text-sm font-medium text-[var(--color-text-primary)]">
-            Title
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
-            />
-          </label>
+        <div className="mt-5 border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-[var(--color-text-primary)]">
+              Title
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
+              />
+            </label>
 
-          <label className="block text-sm font-medium text-[var(--color-text-primary)]">
-            Summary
-            <input
-              value={summary}
-              onChange={(event) => setSummary(event.target.value)}
-              className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
-            />
-          </label>
+            <label className="block text-sm font-medium text-[var(--color-text-primary)]">
+              Summary
+              <input
+                value={summary}
+                onChange={(event) => setSummary(event.target.value)}
+                className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
+              />
+            </label>
 
-          <label className="block text-sm font-medium text-[var(--color-text-primary)]">
-            Content
-            <textarea
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              rows={14}
-              className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 font-mono text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
-            />
-          </label>
+            <label className="block text-sm font-medium text-[var(--color-text-primary)]">
+              Content
+              <textarea
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                rows={14}
+                className="mt-1 w-full border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 font-mono text-sm font-light text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-border-hover)]"
+              />
+            </label>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={isSaving || isDeleting}
-              className="border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-border-hover)] disabled:opacity-50"
-            >
-              {isSaving ? "Saving..." : "Save Changes"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={isSaving || isDeleting}
+                className="border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-border-hover)] disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -215,6 +214,6 @@ export default function PostOwnerActions({
           {error}
         </p>
       ) : null}
-    </section>
+    </>
   );
 }
