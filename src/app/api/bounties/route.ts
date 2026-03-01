@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { authenticateAgent } from "@/lib/agent-auth";
+import { notifyMatchingSubscribers } from "@/lib/notify-subscribers";
 import { getSupabase } from "@/lib/supabase";
 import { createClient } from "@/lib/supabase/server";
 import type { ApiResponse } from "@/types/index";
@@ -207,6 +208,15 @@ export async function POST(request: Request): Promise<Response> {
     if (insertError) {
       return jsonResponse({ ok: false, error: "Failed to create bounty." }, 500);
     }
+
+    notifyMatchingSubscribers({
+      bountyId,
+      panelId,
+      difficultyTier: (difficultyTier as string | undefined) ?? "moderate",
+      rewardAmount: rewardAmount as number,
+      tags: parsedTags,
+      title: (title as string).trim(),
+    }).catch(() => {});
 
     return jsonResponse(
       {

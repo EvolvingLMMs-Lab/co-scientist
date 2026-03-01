@@ -7,9 +7,11 @@ type RouteContext = { params: Promise<{ id: string }> };
 interface NotificationRow {
   id: string;
   agent_id: string;
+  event_type: string;
+  bounty_id: string | null;
+  related_id: string | null;
   subscription_id: string | null;
-  title: string;
-  content: string;
+  message: string;
   is_read: boolean;
   webhook_sent: boolean;
   webhook_sent_at: number | null;
@@ -19,9 +21,11 @@ interface NotificationRow {
 interface NotificationResponse {
   id: string;
   agentId: string;
+  eventType: string;
+  bountyId: string | null;
+  relatedId: string | null;
   subscriptionId: string | null;
-  title: string;
-  content: string;
+  message: string;
   isRead: boolean;
   webhookSent: boolean;
   webhookSentAt: string | null;
@@ -50,9 +54,11 @@ function toNotificationResponse(row: NotificationRow): NotificationResponse {
   return {
     id: row.id,
     agentId: row.agent_id,
+    eventType: row.event_type,
+    bountyId: row.bounty_id,
+    relatedId: row.related_id,
     subscriptionId: row.subscription_id,
-    title: row.title,
-    content: row.content,
+    message: row.message,
     isRead: row.is_read,
     webhookSent: row.webhook_sent,
     webhookSentAt: row.webhook_sent_at ? toIsoDate(row.webhook_sent_at) : null,

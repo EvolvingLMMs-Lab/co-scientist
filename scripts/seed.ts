@@ -449,27 +449,29 @@ Total: ~335 PFLOPS, ~24 H100-hours. MME: 1204.46. Data: 558K caption pairs (Stag
 
 ## Training Intrinsics
 
-### Intrinsic 1: The Vision Encoder Is a Read-Only Feature Bank
+### Intrinsic 1: The Vision Encoder Stays Frozen
 
-SigLIP2-so400m stays frozen throughout both stages. This is not a shortcut - it reflects a fundamental asymmetry in representation maturity. Vision encoders trained on hundreds of millions of image-text pairs via sigmoid contrastive loss have converged to a representation space that 558K captioning pairs cannot improve. Fine-tuning would cause catastrophic forgetting of visual features that required orders of magnitude more data to learn.
+SigLIP2-so400m stays frozen throughout both stages. This follows the standard LLaVA two-stage recipe: freeze the vision encoder, train only the projector (Stage 1), then unfreeze the LLM while keeping the vision encoder frozen (Stage 2). The practical motivation is straightforward - the vision encoder is already a strong feature extractor out of the box, and fine-tuning it on 558K captioning pairs risks degrading features learned from much larger pretraining data, while also increasing GPU memory requirements significantly.
 
-The implication: for VLMs, visual representation quality is an **input** to training, not an **output**. You select it, you do not learn it.
+Whether this is strictly necessary is an open question. Some VLM recipes (e.g., PaLI, InternVL) do fine-tune the vision encoder at larger data scales and report gains. At the NanoVLM compute budget, freezing is the conservative and validated choice.
 
-### Intrinsic 2: Learning Rate Asymmetry Quantifies the Alignment Bottleneck
+### Intrinsic 2: Learning Rate Reflects Parameter Maturity, Not Task Difficulty
 
-Stage 1 uses $\eta_1 = 10^{-3}$. Stage 2 uses $\eta_2 = 2 \times 10^{-5}$. The 50x ratio is not arbitrary - it reflects how much harder cross-modal alignment is than instruction following. The projector must learn a substantial basis change from scratch:
+Stage 1 uses $\eta_1 = 10^{-3}$. Stage 2 uses $\eta_2 = 2 \times 10^{-5}$. The 50x gap is not a statement about alignment being "harder" than instruction following. It reflects which parameters are being trained and their initialization state.
+
+In Stage 1, only the MLP projector is trainable - randomly initialized weights that need a high learning rate to move from their starting point:
 
 $$
 \mathbf{h}_{\text{lang}} = W_2 \cdot \sigma(W_1 \cdot \mathbf{h}_{\text{vis}} + b_1) + b_2
 $$
 
-where $W_1, W_2$ are the MLP layers and $\sigma$ is the nonlinearity. Entire alignment quality depends on learning this mapping in Stage 1 before the LLM is allowed to adapt.
+In Stage 2, the LLM (Qwen3-0.6B) is unfrozen - pretrained weights that need a low learning rate to avoid forgetting. This is standard transfer learning practice, not a VLM-specific insight. The specific ratio depends on the model pairing and data scale, not on any intrinsic property of cross-modal alignment.
 
-### Intrinsic 3: FLOPS Do Not Track Wall-Clock Proportionally
+### Intrinsic 3: Wall-Clock Is Dominated by Frozen Forward Passes
 
-Stage 1 burns 2.4x the FLOPS of Stage 2 (237 vs 98 PFLOPS) and takes 4.4x the GPU-hours (19.3 vs 4.4). The effective batch sizes explain this: Stage 1 processes 256 samples per step ($32 \times 8$) versus Stage 2's 64 ($8 \times 8$). Each Stage 1 step runs forward passes through the frozen 400M-param vision encoder and 0.6B-param LLM even though only the projector's gradients are computed.
+Stage 1 burns 2.4x the FLOPS of Stage 2 (237 vs 98 PFLOPS) but takes 4.4x the GPU-hours (19.3 vs 4.4). The disproportionate wall-clock cost comes from the training setup: Stage 1 still runs full forward passes through the frozen 400M-param vision encoder and 0.6B-param LLM to compute the projector's gradients, but only the projector's small parameter set gets updated. Most of the compute is "wasted" on frozen inference.
 
-Stage 2 drops batch size to 8 because backpropagation through the unfrozen LLM quadruples activation memory. This is a design tension with no free lunch: larger batches improve throughput but fight memory.
+Stage 2 uses a smaller per-GPU batch size (8 vs 32) because backpropagation through the unfrozen LLM increases activation memory. The exact memory overhead depends on model architecture and sequence length, but the tradeoff is real: you cannot use Stage 1's batch size once the LLM gradients are active.
 
 ### Intrinsic 4: Data Filtering Is Compute Arbitrage
 
@@ -510,7 +512,7 @@ The question is whether this DAG can be learned from the literature, or whether 
 1. Can the two stages be merged with differential learning rates, or does curriculum separation provide irreducible benefit?
 2. What is the minimum projector capacity that preserves alignment? Is a single linear layer sufficient at small scale?
 3. Is the 50x LR ratio universal across vision-language architectures, or specific to the SigLIP2/Qwen3 pairing?
-4. Given that MFU drops from ~50% (text-only) to ~30% (image VLM) due to ViT overhead, can the projector be redesigned to reduce visual token count without losing alignment quality?`,
+4. VLM training typically achieves lower MFU than text-only LLM training due to the heterogeneous forward pass (ViT + projector + LLM). Can the projector be redesigned to reduce visual token count without losing alignment quality?\`,
   },
 ];
 

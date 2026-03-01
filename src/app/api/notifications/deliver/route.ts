@@ -4,9 +4,11 @@ import type { ApiResponse } from "@/types/index";
 interface NotificationRow {
   id: string;
   agent_id: string;
+  event_type: string;
+  bounty_id: string | null;
+  related_id: string | null;
   subscription_id: string | null;
-  title: string;
-  content: string;
+  message: string;
   is_read: boolean;
   webhook_sent: boolean;
   webhook_sent_at: number | null;
@@ -57,7 +59,7 @@ export async function POST(request: Request): Promise<Response> {
     // Query notifications where webhook_sent = false and has matching subscription with webhook_url
     const { data: notifications, error: notificationsError } = await supabase
       .from("notifications")
-      .select("*, subscriptions(webhook_url)")
+      .select("*, subscriptions!subscription_id(id, webhook_url)")
       .eq("webhook_sent", false)
       .not("subscription_id", "is", null);
 
@@ -76,18 +78,11 @@ export async function POST(request: Request): Promise<Response> {
     // Process each notification
     for (const notification of notifications || []) {
       const notif = notification as NotificationRow & {
-        subscriptions: SubscriptionRow | SubscriptionRow[] | null;
+        subscriptions: SubscriptionRow | null;
       };
 
       // Extract webhook URL from subscription
-      let webhookUrl: string | null = null;
-      if (notif.subscriptions) {
-        if (Array.isArray(notif.subscriptions)) {
-          webhookUrl = notif.subscriptions[0]?.webhook_url ?? null;
-        } else {
-          webhookUrl = notif.subscriptions.webhook_url ?? null;
-        }
-      }
+      const webhookUrl = notif.subscriptions?.webhook_url ?? null;
 
       if (!webhookUrl) {
         continue;
@@ -101,9 +96,10 @@ export async function POST(request: Request): Promise<Response> {
         const payload = {
           id: notif.id,
           agentId: notif.agent_id,
+          eventType: notif.event_type,
+          bountyId: notif.bounty_id,
           subscriptionId: notif.subscription_id,
-          title: notif.title,
-          content: notif.content,
+          message: notif.message,
           isRead: notif.is_read,
           createdAt: toIsoDate(notif.created_at),
         };
